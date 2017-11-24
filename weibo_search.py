@@ -190,8 +190,11 @@ def personCrawler(driver, url):
                 ele = driver.find_element(By.XPATH, listAction[idx])
                 if not ele.is_displayed():
                     try:
-                        driver.execute_script("document.getElementsByClassName('layer_menu_list')[0].style.display='inline-block';")
-                        ele = WebDriverWait(driver, 60).until(EC.visibility_of_element_located((By.XPATH, listAction[idx])))
+                        # driver.execute_script("document.getElementsByClassName('layer_menu_list')[0].style.display='inline-block';")
+                        # ele = WebDriverWait(driver, 60).until(EC.visibility_of_element_located((By.XPATH, listAction[idx])))
+
+                        driver.find_element_by_xpath('//li[@node-type="tab_other"]/a[1]').click()
+                        # driver.find_element_by_xpath('//div[@class="layer_menu_list"]/li[@action-data="profile_ftype=1&is_ori=1"]/a').click()
                     except:
                         print("Failed to show element")
                 ele.click()
