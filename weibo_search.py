@@ -337,6 +337,7 @@ def personCrawler(driver, url):
                         mediaBox = card.find_element_by_xpath('.//div[@class="media_box"]')
                     except Exception as ex:
                         print(ex)
+                        mediaBox = None
                     try:
                         if mediaBox.find_elements_by_xpath('./ul/li[@action-type="fl_pics"]'):
                             cardType = 1    # 'picture'
