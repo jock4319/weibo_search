@@ -78,21 +78,23 @@ def searchCrawler(driver, keyword, MAX_PAGE):
         for person in personList:
             personInfo = []
             try:
-                print(person.find_element_by_xpath('.//a[@class="W_texta W_fb"]').get_attribute('title'))
-                personInfo.append(person.find_element_by_xpath('.//a[@class="W_texta W_fb"]').get_attribute('title'))
+                title = person.find_element_by_xpath('.//a[@class="W_texta W_fb"]').get_attribute('title')
+                print(title)
+                personInfo.append(title)
             except:
                 continue
             try:
-                print(person.find_elements_by_xpath('.//a[@class="W_linkb"]')[2].text)
-                fans = int(person.find_elements_by_xpath('.//a[@class="W_linkb"]')[2].text.replace('万', '0000'))
-                personInfo.append(fans)
+                fans = person.find_elements_by_xpath('.//a[@class="W_linkb"]')[2].text.replace('万', '0000')
+                print(fans)
+                personInfo.append(int(fans))
             except:
                 personInfo.append('')
                 pass
 
             try:
-                print(person.find_element_by_xpath('.//p[@class="person_card"]').text)
-                personInfo.append(person.find_element_by_xpath('.//p[@class="person_card"]').text)
+                desc = person.find_element_by_xpath('.//p[@class="person_card"]').text
+                print(desc)
+                personInfo.append(desc)
             except:
                 personInfo.append('')
                 pass
@@ -167,11 +169,13 @@ def personCrawler(driver, url):
     comment = [[], []]
     lastPostTime = [DEFAULT_DATE, DEFAULT_DATE]
     postType = [0, 0, 0, 0]     # 'others', 'picture', 'video', 'article'
+    listArticleRead = []
+    resArticleRead = ''
 
     if openUrlWithRetry(driver, url, 5) > 0:
         print(url)
     else:
-        return fans, avgForward, avgComment, resForward, resComment, lastPostTime, postType
+        return fans, avgForward, avgComment, resForward, resComment, lastPostTime, postType, resArticleRead
 
     for page in range(2):
 
@@ -237,32 +241,56 @@ def personCrawler(driver, url):
                     postTime = DEFAULT_DATE
                     print("Fail to get post time")
 
+                # check the type of post
                 if idx == 1:
+                    cardType = 0    # 'others'
                     try:
-                        if card.find_elements_by_xpath('.//div[@class="media_box"]/ul/li[@action-type="fl_pics"]'):
-                            cardType = 1    # 'picture'
-                        elif card.find_elements_by_xpath('.//div[@class="media_box"]/ul/li[@action-type="fl_h5_video"]'):
-                            cardType = 2    # 'video'
-                        elif card.find_elements_by_xpath('.//div[@class="media_box"]/div[@action-type="widget_articleLayer"]'):
-                            cardType = 3    # 'article'
-                        else:
-                            cardType = 0    # 'others'
-                        postType[cardType] += 1
+                        mediaBox = card.find_elements_by_xpath('.//div[@class="media_box"]]')
                     except:
                         pass
-                    print(cardType)
+                    try:
+                        if mediaBox.find_elements_by_xpath('./ul/li[@action-type="fl_pics"]'):
+                            cardType = 1    # 'picture'
+                    except:
+                        pass
+                    try:
+                        if mediaBox.find_elements_by_xpath('./ul/li[@node-type="fl_h5_video"]'):
+                            cardType = 2    # 'video'
+                    except:
+                        pass
+                    try:
+                        if mediaBox.find_elements_by_xpath('./div[@action-type="widget_articleLayer"]'):
+                            cardType = 3    # 'article'
+                            mediaBox.find_elements_by_xpath('./div[@action-type="widget_articleLayer"]/div[1]/div/a').click()
+
+                            # get view number of article
+                            iframe = driver.find_elements_by_xpath('//iframe[contains(@name, "articleLayer")]')[1]
+                            driver.switch_to_frame(iframe)
+                            author = driver.find_element_by_xpath('//div[@class="main_editor"]/div[contains(@class, "authorinfo")]/div/span/a').get_attribute('href')
+                            if url == author:
+                                read = driver.find_element_by_xpath('//div[@class="main_editor"]/div[contains(@class, "authorinfo")]/div[@class="W_fr"]/span[@class="num"]').text
+                                read.replace('万', '0000')
+                                read = re.sub("[^0123456789\.]", '', read)
+                                listArticleRead.append(int(read))
+                            driver.switch_to_default_content()
+                    except:
+                        pass
+                    postType[cardType] += 1
+                    print('type: %d' % cardType)
 
 
                 # get forward number
                 try:
-                    print(card.find_element_by_xpath('.//span[@node-type="forward_btn_text"]//em[2]').text)
-                    forward[idx].append(int(card.find_element_by_xpath('.//span[@node-type="forward_btn_text"]//em[2]').text))
+                    forwardNum = card.find_element_by_xpath('.//span[@node-type="forward_btn_text"]//em[2]').text
+                    print(forwardNum)
+                    forward[idx].append(int(forwardNum))
                 except:
                     pass
                 # get comment number
                 try:
-                    print(card.find_element_by_xpath('.//span[@node-type="comment_btn_text"]//em[2]').text)
-                    comment[idx].append(int(card.find_element_by_xpath('.//span[@node-type="comment_btn_text"]//em[2]').text))
+                    commentNum = card.find_element_by_xpath('.//span[@node-type="comment_btn_text"]//em[2]').text
+                    print(commentNum)
+                    comment[idx].append(int(commentNum))
                 except:
                     pass
                 if postTime > lastPostTime[idx]:
@@ -301,7 +329,15 @@ def personCrawler(driver, url):
             resComment[idx] = ("-")
         print("--- Average: %d, %d, count: %d, %d" % (round(avgForward[idx]), round(avgComment[idx]), len(forward[idx]), len(comment[idx])))
 
-    return fans, avgForward, avgComment, resForward, resComment, lastPostTime, postType
+    # calculate 原創文章閱讀量（全range,均數)
+    avgRead = 0
+    for read in listArticleRead:
+        avgRead += read
+    avgRead = avgRead/len(listArticleRead)
+    resArticleRead = ("%d~%d, %d" % (min(listArticleRead), max(listArticleRead), avgRead))
+    print("--- article read: %s" % resArticleRead)
+
+    return fans, avgForward, avgComment, resForward, resComment, lastPostTime, postType, resArticleRead
 
 def openUrlWithRetry(driver, url, retry):
     countRetry = retry
@@ -320,25 +356,7 @@ def openUrlWithRetry(driver, url, retry):
             break
     return countRetry
 
-def main(argv):
-    MAX_PAGE = 11
-    filename = ''
-    try:
-        opts, args = getopt.getopt(argv,"hf:p:",["filename=", "page="])
-    except getopt.GetoptError:
-        print ('weibo_search.py -f <filename> -p <max page>')
-        sys.exit(2)
-    for opt, arg in opts:
-        if opt == '-h':
-            print ('weibo_search.py -f <filename> -p <max page>')
-            sys.exit()
-        elif opt in ('-f', '--filename'):
-            filename = arg
-            # keyword = arg
-            # keyword = keyword.replace('+', ' ')
-        elif opt in ('-p', '--maxpage'):
-            MAX_PAGE = int(arg)
-
+def searchFile(driver, filename, MAX_PAGE):
     try:
         f = open(filename, 'r', newline='', encoding='utf-8')
         reader = csv.reader(f)
@@ -346,87 +364,107 @@ def main(argv):
         print("ERROR: file (%s) can't be opened, pleace check again", filename)
         return
 
+    searchResult = []
+    for item in reader:
+        product_seg = item[0].strip()
+        circle = item[1].strip()
+        keyword = item[2].strip()
+        searchKeyword(driver, product_seg, circle, keyword, MAX_PAGE)
+
+def searchKeyword(driver, product_seg, circle, keyword, MAX_PAGE):
+    outfile = product_seg + "_" + circle + "_" + keyword + "_" + str(datetime.date.today()) + '.csv'
+    isExist = os.path.exists(outfile)
+    fout = open(outfile, 'a', newline='', encoding='utf-8')
+    writer = csv.writer(fout)
+    if not isExist:
+        fout.write('\ufeff')
+        writer.writerow(["產品", "圈", "關鍵字", "微博名", "粉絲數", "全部轉發量（全range,均數）", "全部評論數（全range,均數）", "全部最後更新時間", "原創轉發量（全range,均數）",\
+         "原創評論數（全range,均數）", "原創最後更新時間", "圖-影-文-其他", "微博上的自我介紹", "鏈結", "官方", "原創文章閱讀量（全range,均數)"])
+    personList = searchCrawler(driver, keyword, MAX_PAGE)
+    for person in personList:
+        thePerson = person[:]
+        fans, avgForward, avgComment, resForward, resComment, lastPostTime, postType, resArticleRead = personCrawler(driver, thePerson[3])
+        thePerson.insert(0, product_seg)   # product
+        thePerson.insert(1, circle)   # circle
+        thePerson.insert(2, keyword)   # keyword
+        thePerson[4] = fans
+        thePerson.insert(5, ("%s, %d" % (resForward[0], avgForward[0])))
+        thePerson.insert(6, ("%s, %d" % (resComment[0], avgComment[0])))
+        thePerson.insert(7, ("%s" % lastPostTime[0]))
+        thePerson.insert(8, ("%s, %d" % (resForward[1], avgForward[1])))
+        thePerson.insert(9, ("%s, %d" % (resComment[1], avgComment[1])))
+        thePerson.insert(10, ("%s" % lastPostTime[1]))
+        thePerson.insert(11, ("%d-%d-%d-%d" % (postType[1], postType[2], postType[3], postType[0])))
+        thePerson.append("V" if "官方" in thePerson[12] else "")
+        thePerson.append(resArticleRead)
+
+        sql = "SELECT * FROM Weibo WHERE product_seg='%s' AND circle='%s' AND influencer='%s' AND link='%s'" % (thePerson[0], thePerson[1], thePerson[3], thePerson[13])
+        print(sql)
+        count = countMysqlDB(sql)
+        if count > 0:
+            print("Already in database: %d" % count)
+        else:
+            writer.writerow(thePerson)
+
+        field2Insert = ''
+        value2Insert = ''
+        if not (resForward[0] == '' and resComment[0] == '' and resForward[1] == '' and resComment[1] == ''):
+            field2Insert += "share_avg, comment_avg, share_range, comment_range, ori_share_avg, ori_comment_avg, ori_share_range, ori_comment_range, "
+            value2Insert += str(avgForward[0]) + ", " + str(avgComment[0]) + ", " + resForward[0] + ", " + resComment[0] + ", " \
+                + str(avgForward[1]) + ", " + str(avgComment[1]) + ", " + resForward[1] + ", " + resComment[1] + ", "
+        if lastPostTime[0] != DEFAULT_DATE:
+            field2Insert += "lastPostTime, "
+            value2Insert += str(lastPostTime[0]) + ", "
+        if lastPostTime[1] != DEFAULT_DATE:
+            field2Insert += "ori_lastPostTime, "
+            value2Insert += str(lastPostTime[1]) + ", "
+        sql = "INSERT INTO Weibo (product_seg, circle, keyword, influencer, follower, " + field2Insert + "post_type, description, link)" \
+            + "VALUES (" + thePerson[0] + ", " + thePerson[1] + ", " + thePerson[2] + ", " + thePerson[3] + ", " + fans + ", " \
+            + value2Insert + thePerson[11] + ", " + thePerson[12] + ", " + thePerson[13] + ")"
+        print(sql)
+        updateMysqlDB(sql)
+        fout.flush()
+
+    fout.close()
+
+def main(argv):
+    MAX_PAGE = 11
+    filename = ''
+    keyword = ''
+    url = ''
+    try:
+        opts, args = getopt.getopt(argv,"hf:k:u:p:",["filename=", "keyword=", "url=", "page="])
+    except getopt.GetoptError:
+        print ('weibo_search.py -f <filename> -k <keyword> -u <url> -p <max page>')
+        sys.exit(2)
+    for opt, arg in opts:
+        if opt == '-h':
+            print ('weibo_search.py -f <filename> -k <keyword> -u <url> -p <max page>')
+            sys.exit()
+        elif opt in ('-f', '--filename'):
+            filename = arg
+            # keyword = arg
+            # keyword = keyword.replace('+', ' ')
+        elif opt in ('-p', '--maxpage'):
+            MAX_PAGE = int(arg)
+        elif opt in ('-k', '--keyword'):
+            keyword = keyword.replace('+', ' ')
+            keyword = arg
+        elif opt in ('-u', '--url'):
+            url = arg
+
     #driver = createBrowserChrome()
     driver = createBrowserFirefox()
 
-    searchResult = []
-    for item in reader:
-        outfile = filename[:filename.find(".")] + "_" + item[2].strip() + "_"+ str(datetime.date.today()) + '.csv'
-        isExist = os.path.exists(outfile)
-        fout = open(outfile, 'a', newline='', encoding='utf-8')
-        writer = csv.writer(fout)
-        if not isExist:
-            fout.write('\ufeff')
-            writer.writerow(["產品", "圈", "關鍵字", "微博名", "粉絲數", "全部轉發量（全range,均數）", "全部評論數（全range,均數）", "全部最後更新時間", "原創轉發量（全range,均數）",\
-             "原創評論數（全range,均數）", "原創最後更新時間", "圖-影-文-其他", "微博上的自我介紹", "鏈結"])
-        personList = searchCrawler(driver, item[2].strip(), MAX_PAGE)
-        for person in personList:
-            thePerson = person[:]
-            fans, avgForward, avgComment, resForward, resComment, lastPostTime, postType = personCrawler(driver, thePerson[3])
-            # thePerson.insert(2, ("%s, %d" % (resForward[0], avgForward[0])))
-            # thePerson.insert(3, ("%s, %d" % (resComment[0], avgComment[0])))
-            # thePerson.insert(4, ("%s" % lastPostTime[0]))
-            # thePerson.insert(5, ("%s, %d" % (resForward[1], avgForward[1])))
-            # thePerson.insert(6, ("%s, %d" % (resComment[1], avgComment[1])))
-            # thePerson.insert(7, ("%s" % lastPostTime[1]))
-            # thePerson.insert(0, item[2].strip())   # keyword
-            # thePerson.insert(0, item[1].strip())   # circle
-            # thePerson.insert(0, item[0].strip())   # product
-            thePerson.insert(0, item[0].strip())   # product
-            thePerson.insert(1, item[1].strip())   # circle
-            thePerson.insert(2, item[2].strip())   # keyword
-            thePerson[4] = fans
-            thePerson.insert(5, ("%s, %d" % (resForward[0], avgForward[0])))
-            thePerson.insert(6, ("%s, %d" % (resComment[0], avgComment[0])))
-            thePerson.insert(7, ("%s" % lastPostTime[0]))
-            thePerson.insert(8, ("%s, %d" % (resForward[1], avgForward[1])))
-            thePerson.insert(9, ("%s, %d" % (resComment[1], avgComment[1])))
-            thePerson.insert(10, ("%s" % lastPostTime[1]))
-            thePerson.insert(11, ("%d-%d-%d-%d" % (postType[1], postType[2], postType[3], postType[0])))
-
-            sql = "SELECT * FROM Weibo WHERE product_seg='%s' AND circle='%s' AND influencer='%s' AND link='%s'" % (thePerson[0], thePerson[1], thePerson[3], thePerson[13])
-            print(sql)
-            count = countMysqlDB(sql)
-            if count > 0:
-                print("Already in database: %d" % count)
-            else:
-                writer.writerow(thePerson)
-
-            field2Insert = ''
-            value2Insert = ''
-            if not (resForward[0] == '' and resComment[0] == '' and resForward[1] == '' and resComment[1] == ''):
-                field2Insert += "share_avg, comment_avg, share_range, comment_range, ori_share_avg, ori_comment_avg, ori_share_range, ori_comment_range, "
-                value2Insert += str(avgForward[0]) + ", " + str(avgComment[0]) + ", " + resForward[0] + ", " + resComment[0] + ", " \
-                    + str(avgForward[1]) + ", " + str(avgComment[1]) + ", " + resForward[1] + ", " + resComment[1] + ", "
-            if lastPostTime[0] != DEFAULT_DATE:
-                field2Insert += "lastPostTime, "
-                value2Insert += str(lastPostTime[0]) + ", "
-            if lastPostTime[1] != DEFAULT_DATE:
-                field2Insert += "ori_lastPostTime, "
-                value2Insert += str(lastPostTime[1]) + ", "
-            sql = "INSERT INTO Weibo (product_seg, circle, keyword, influencer, follower, " + field2Insert + "post_type, description, link)" \
-                + "VALUES (" + thePerson[0] + ", " + thePerson[1] + ", " + thePerson[2] + ", " + thePerson[3] + ", " + fans + ", " \
-                + value2Insert + thePerson[11] + ", " + thePerson[12] + ", " + thePerson[13] + ")"
-            print(sql)
-            updateMysqlDB(sql)
-
-            # if resForward[0] == '' and resComment[0] == '' and resForward[1] == '' and resComment[1] == '':
-            #     sql = """INSERT INTO Weibo (product_seg, circle, keyword, influencer, follower, description, link)
-            #         VALUES ('%s', '%s', '%s', '%s', '%d', '%s', '%s')""" \
-            #         % (thePerson[0], thePerson[1], thePerson[2], thePerson[3], int(thePerson[4]), thePerson[11], thePerson[12])
-            # else:
-            #     sql = """INSERT INTO Weibo (product_seg, circle, keyword, influencer, follower, share_avg, comment_avg, share_range, comment_range, lastPostTime,
-            #         ori_share_avg, ori_comment_avg, ori_share_range, ori_comment_range, ori_lastPostTime, description, link)
-            #         VALUES ('%s', '%s', '%s', '%s', '%d', '%d', '%d', '%s', '%s', '%s', '%d', '%d', '%s', '%s', '%s', '%s', '%s')""" \
-            #         % (thePerson[0], thePerson[1], thePerson[2], thePerson[3], int(thePerson[4]), avgForward[0], avgComment[0], resForward[0], resComment[0], lastPostTime[0],\
-            #          avgForward[1], avgComment[1], resForward[1], resComment[1], lastPostTime[1], thePerson[11], thePerson[12])
-            # print(sql)
-            # updateMysqlDB(sql)
-        fout.close()
+    if filename != '':
+        searchFile(driver, filename, MAX_PAGE)
+    elif keyword != '':
+        searchKeyword(driver, '', '', keyword, MAX_PAGE)
+    elif url != '':
+        personCrawler(driver, url)
 
     driver.quit()
     #display.stop()
-
 
 
 if __name__ == "__main__":
