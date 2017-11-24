@@ -53,7 +53,7 @@ def createBrowserFirefox():
     driver.set_page_load_timeout(60)
     return driver
 
-def searchCrawler(driver, keyword, MAX_PAGE):
+def searchUserCrawler(driver, keyword, MAX_PAGE):
     print('Keyword is %s, %d page(s)' % (keyword, MAX_PAGE))
     _page = 1
     next_page = "http://s.weibo.com/user/" + quote(quote(keyword)) + "&Refer=weibo_user"
@@ -86,18 +86,18 @@ def searchCrawler(driver, keyword, MAX_PAGE):
             try:
                 fans = person.find_elements_by_xpath('.//a[@class="W_linkb"]')[2].text.replace('万', '0000')
                 print(fans)
-                personInfo.append(int(fans))
+                #personInfo.append(int(fans))
             except:
-                personInfo.append('')
+                #personInfo.append('')
                 pass
 
-            try:
-                desc = person.find_element_by_xpath('.//p[@class="person_card"]').text
-                print(desc)
-                personInfo.append(desc)
-            except:
-                personInfo.append('')
-                pass
+            # try:
+            #     desc = person.find_element_by_xpath('.//p[@class="person_card"]').text
+            #     print(desc)
+            #     personInfo.append(desc)
+            # except:
+            #     personInfo.append('')
+            #     pass
             try:
                 link = person.find_elements_by_xpath('.//a[@class="W_linkb"]')[0].get_attribute('href').split('?')[0]
                 print(link)
@@ -109,6 +109,79 @@ def searchCrawler(driver, keyword, MAX_PAGE):
                 searchResult.append(personInfo)
             #writer.writerow(searchResult)
             print("---- %d ----" % len(searchResult))
+
+        if _page < MAX_PAGE:
+            try:
+                next_page = driver.find_element(By.XPATH, '//a[text()="下一页"]')
+                driver.execute_script("window.scrollTo(500, document.body.scrollHeight-500);")
+                #next_page.click()
+                print(next_page.get_attribute('href'))
+                if openUrlWithRetry(driver, next_page.get_attribute('href'), 3) <= 0:
+                    next_page = ""
+            except NoSuchElementException:
+                next_page = ""
+                print ("No more next page")
+        else:
+            next_page = ""
+        _page += 1
+    return searchResult
+
+def searchCrawler(driver, keyword, MAX_PAGE):
+    print('Keyword is %s, %d page(s)' % (keyword, MAX_PAGE))
+    _page = 1
+    next_page = "http://s.weibo.com/weibo/" + quote(quote(keyword))
+
+    searchResult = []
+    if openUrlWithRetry(driver, next_page, 3) <= 0:
+        return searchResult
+    while next_page:
+        time.sleep(randint(5,15))
+        # element = WebDriverWait(driver, 30).until(
+        #     EC.presence_of_element_located((By.XPATH, "//div[@id='pl_user_feedList']"))
+        #     )
+        #driver.execute_script("window.scrollTo(500, document.body.scrollHeight-500);")
+        driver.execute_script("window.scrollTo(500, 1000);")
+
+        # star list
+        try:
+            personList = driver.find_elements_by_xpath('//div[@class="list_star clearfix"]/div[@class="star_detail"]/p[@class="star_name"]/a[@class="name_txt"]')
+        except NoSuchElementException:
+            print("NoSuchElementException")
+            return searchResult
+        for person in personList:
+            personInfo = []
+            try:
+                title = person.text
+                link = person.get_attribute('href').split('?')[0]
+                print(title + ": " + link)
+                personInfo.append(title)
+                personInfo.append(link)
+            except:
+                continue
+            searchResult.append(personInfo)
+            #writer.writerow(searchResult)
+            print("---- %d ----" % len(searchResult))
+
+        # feed list
+        try:
+            personList = driver.find_elements_by_xpath('//div[@action-type="feed_list_item"]//div[contains(@class, "feed_content")]/a[1]')
+        except NoSuchElementException:
+            print("NoSuchElementException")
+            return searchResult
+        for person in personList:
+            personInfo = []
+            try:
+                title = person.text
+                link = person.get_attribute('href').split('?')[0]
+                print(title + ": " + link)
+                personInfo.append(title)
+                personInfo.append(link)
+            except:
+                continue
+            searchResult.append(personInfo)
+            #writer.writerow(searchResult)
+            print("---- %d ----" % len(searchResult))
+
 
         if _page < MAX_PAGE:
             try:
@@ -161,6 +234,7 @@ def updateMysqlDB(sql):
 def personCrawler(driver, url):
     listAction = ['//a[text()="全部"]', '//a[text()="原创"]']
     fans = ''
+    description = ''
     avgForward = [0, 0]
     avgComment = [0, 0]
     resForward = ['', '']
@@ -175,7 +249,7 @@ def personCrawler(driver, url):
     if openUrlWithRetry(driver, url, 5) > 0:
         print(url)
     else:
-        return fans, avgForward, avgComment, resForward, resComment, lastPostTime, postType, resArticleRead
+        return fans, description, avgForward, avgComment, resForward, resComment, lastPostTime, postType, resArticleRead
 
     for page in range(2):
 
@@ -185,6 +259,11 @@ def personCrawler(driver, url):
             try:
                 fans = driver.find_element_by_xpath('//table[@class="tb_counter"]//span[text()="粉丝"]').find_element_by_xpath('../strong').text
                 print(fans + "粉丝")
+            except Exception as ex:
+                print(ex)
+            try:
+                description = driver.find_element_by_xpath('//div[@class="PCD_person_info"]/div/p[@class="info"]').text
+                print(description)
             except Exception as ex:
                 print(ex)
 
@@ -245,23 +324,23 @@ def personCrawler(driver, url):
                 if idx == 1:
                     cardType = 0    # 'others'
                     try:
-                        mediaBox = card.find_elements_by_xpath('.//div[@class="media_box"]]')
+                        mediaBox = card.find_element_by_xpath('.//div[@class="media_box"]]')
                     except:
                         pass
                     try:
-                        if mediaBox.find_elements_by_xpath('./ul/li[@action-type="fl_pics"]'):
+                        if mediaBox.find_elements_by_xpath('.//ul/li[@action-type="fl_pics"]'):
                             cardType = 1    # 'picture'
                     except:
                         pass
                     try:
-                        if mediaBox.find_elements_by_xpath('./ul/li[@node-type="fl_h5_video"]'):
+                        if mediaBox.find_elements_by_xpath('.//ul/li[@node-type="fl_h5_video"]'):
                             cardType = 2    # 'video'
                     except:
                         pass
                     try:
-                        if mediaBox.find_elements_by_xpath('./div[@action-type="widget_articleLayer"]'):
+                        if mediaBox.find_elements_by_xpath('.//div[@action-type="widget_articleLayer"]'):
                             cardType = 3    # 'article'
-                            mediaBox.find_elements_by_xpath('./div[@action-type="widget_articleLayer"]/div[1]/div/a').click()
+                            mediaBox.find_elements_by_xpath('.//div[@action-type="widget_articleLayer"]/div[1]/div/a').click()
 
                             # get view number of article
                             iframe = driver.find_elements_by_xpath('//iframe[contains(@name, "articleLayer")]')[1]
@@ -331,13 +410,16 @@ def personCrawler(driver, url):
 
     # calculate 原創文章閱讀量（全range,均數)
     avgRead = 0
-    for read in listArticleRead:
-        avgRead += read
-    avgRead = avgRead/len(listArticleRead)
-    resArticleRead = ("%d~%d, %d" % (min(listArticleRead), max(listArticleRead), avgRead))
+    if len(listArticleRead) > 0:
+        for read in listArticleRead:
+            avgRead += read
+        avgRead = avgRead/len(listArticleRead)
+        resArticleRead = ("%d~%d, %d" % (min(listArticleRead), max(listArticleRead), avgRead))
+    else:
+        resArticleRead = ("-")
     print("--- article read: %s" % resArticleRead)
 
-    return fans, avgForward, avgComment, resForward, resComment, lastPostTime, postType, resArticleRead
+    return fans, description, avgForward, avgComment, resForward, resComment, lastPostTime, postType, resArticleRead
 
 def openUrlWithRetry(driver, url, retry):
     countRetry = retry
@@ -380,10 +462,28 @@ def searchKeyword(driver, product_seg, circle, keyword, MAX_PAGE):
         fout.write('\ufeff')
         writer.writerow(["產品", "圈", "關鍵字", "微博名", "粉絲數", "全部轉發量（全range,均數）", "全部評論數（全range,均數）", "全部最後更新時間", "原創轉發量（全range,均數）",\
          "原創評論數（全range,均數）", "原創最後更新時間", "圖-影-文-其他", "微博上的自我介紹", "鏈結", "官方", "原創文章閱讀量（全range,均數)"])
-    personList = searchCrawler(driver, keyword, MAX_PAGE)
+    personList = searchUserCrawler(driver, keyword, MAX_PAGE)
+    personList2 = searchCrawler(driver, keyword, MAX_PAGE)
+    # remove duplicate person
+    for p2 in personList2:
+        for p1 in personList:
+            if p2[1] == p1[3]:
+                personList2.remove(p2)
+                break
+    # merge lists
+    personList = personList + personList2
+    # for p2 in personList2:
+    #     p221 = []
+    #     p221.append(p2[0])
+    #     p221.append(p2[1])
+    #     personList.append(p221)
+
+
     for person in personList:
         thePerson = person[:]
-        fans, avgForward, avgComment, resForward, resComment, lastPostTime, postType, resArticleRead = personCrawler(driver, thePerson[3])
+        fans, description, avgForward, avgComment, resForward, resComment, lastPostTime, postType, resArticleRead = personCrawler(driver, thePerson[3])
+        if int(fans) < 10000:
+            continue
         thePerson.insert(0, product_seg)   # product
         thePerson.insert(1, circle)   # circle
         thePerson.insert(2, keyword)   # keyword
@@ -395,6 +495,7 @@ def searchKeyword(driver, product_seg, circle, keyword, MAX_PAGE):
         thePerson.insert(9, ("%s, %d" % (resComment[1], avgComment[1])))
         thePerson.insert(10, ("%s" % lastPostTime[1]))
         thePerson.insert(11, ("%d-%d-%d-%d" % (postType[1], postType[2], postType[3], postType[0])))
+        thePerson[12] = description
         thePerson.append("V" if "官方" in thePerson[12] else "")
         thePerson.append(resArticleRead)
 
@@ -410,17 +511,17 @@ def searchKeyword(driver, product_seg, circle, keyword, MAX_PAGE):
         value2Insert = ''
         if not (resForward[0] == '' and resComment[0] == '' and resForward[1] == '' and resComment[1] == ''):
             field2Insert += "share_avg, comment_avg, share_range, comment_range, ori_share_avg, ori_comment_avg, ori_share_range, ori_comment_range, "
-            value2Insert += str(avgForward[0]) + ", " + str(avgComment[0]) + ", " + resForward[0] + ", " + resComment[0] + ", " \
-                + str(avgForward[1]) + ", " + str(avgComment[1]) + ", " + resForward[1] + ", " + resComment[1] + ", "
+            value2Insert += str(avgForward[0]) + "', '" + str(avgComment[0]) + "', '" + resForward[0] + "', '" + resComment[0] + "', '" \
+                + str(avgForward[1]) + "', '" + str(avgComment[1]) + "', '" + resForward[1] + "', '" + resComment[1] + "', '"
         if lastPostTime[0] != DEFAULT_DATE:
             field2Insert += "lastPostTime, "
-            value2Insert += str(lastPostTime[0]) + ", "
+            value2Insert += str(lastPostTime[0]) + "', '"
         if lastPostTime[1] != DEFAULT_DATE:
             field2Insert += "ori_lastPostTime, "
-            value2Insert += str(lastPostTime[1]) + ", "
-        sql = "INSERT INTO Weibo (product_seg, circle, keyword, influencer, follower, " + field2Insert + "post_type, description, link)" \
-            + "VALUES (" + thePerson[0] + ", " + thePerson[1] + ", " + thePerson[2] + ", " + thePerson[3] + ", " + fans + ", " \
-            + value2Insert + thePerson[11] + ", " + thePerson[12] + ", " + thePerson[13] + ")"
+            value2Insert += str(lastPostTime[1]) + "', '"
+        sql = "INSERT INTO Weibo (product_seg, circle, keyword, influencer, follower, " + field2Insert + "post_type, description, link, article_read)" \
+            + "VALUES ('" + thePerson[0] + "', '" + thePerson[1] + "', '" + thePerson[2] + "', '" + thePerson[3] + "', '" + fans + "', '" \
+            + value2Insert + thePerson[11] + "', '" + thePerson[12] + "', '" + thePerson[13] + "', '" + resArticleRead + "')"
         print(sql)
         updateMysqlDB(sql)
         fout.flush()
