@@ -284,9 +284,9 @@ def personCrawler(driver, url):
                 if not ele.is_displayed():
                     try:
                         # driver.execute_script("document.getElementsByClassName('layer_menu_list')[0].style.display='inline-block';")
-                        # ele = WebDriverWait(driver, 60).until(EC.visibility_of_element_located((By.XPATH, listAction[idx])))
-
                         driver.find_element_by_xpath('//li[@node-type="tab_other"]/a[1]').click()
+                        ele = WebDriverWait(driver, 60).until(EC.visibility_of_element_located((By.XPATH, listAction[idx])))
+
                         # driver.find_element_by_xpath('//div[@class="layer_menu_list"]/li[@action-data="profile_ftype=1&is_ori=1"]/a').click()
                     except:
                         print("Failed to show element")
@@ -463,9 +463,10 @@ def searchFile(driver, filename, MAX_PAGE):
 
     searchResult = []
     for item in reader:
-        product_seg = item[0].strip()
-        circle = item[1].strip()
-        keyword = item[2].strip()
+        product_seg = item[0].replace('\ufeff', '')
+        circle = item[1]
+        keyword = item[2]
+        print(repr("%s-%s-%s" % (product_seg, circle, keyword)))
         searchKeyword(driver, product_seg, circle, keyword, MAX_PAGE)
 
 def searchKeyword(driver, product_seg, circle, keyword, MAX_PAGE):
