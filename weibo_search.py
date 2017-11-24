@@ -54,76 +54,85 @@ def createBrowserFirefox():
     return driver
 
 def searchUserCrawler(driver, keyword, MAX_PAGE):
+    listSearch = ["http://s.weibo.com/user/&tag=", "http://s.weibo.com/user/"]
     print('Keyword is %s, %d page(s)' % (keyword, MAX_PAGE))
     _page = 1
-    next_page = "http://s.weibo.com/user/" + quote(quote(keyword)) + "&Refer=weibo_user"
+    #next_page = "http://s.weibo.com/user/" + quote(quote(keyword)) + "&Refer=weibo_user"
     #next_page = "http://s.weibo.com/user/" + keyword + "&Refer=weibo_user"
 
     searchResult = []
-    if openUrlWithRetry(driver, next_page, 3) <= 0:
-        return searchResult
-    while next_page:
-        time.sleep(randint(5,15))
-        # element = WebDriverWait(driver, 30).until(
-        #     EC.presence_of_element_located((By.XPATH, "//div[@id='pl_user_feedList']"))
-        #     )
-        #driver.execute_script("window.scrollTo(500, document.body.scrollHeight-500);")
-        driver.execute_script("window.scrollTo(500, 1000);")
+    for search in listSearch:
+        next_page = search + quote(quote(keyword))
 
-        try:
-            personList = driver.find_elements_by_xpath('//div[@id="pl_user_feedList"]//div[@class="list_person clearfix"]')
-        except NoSuchElementException:
-            print("NoSuchElementException")
+        if openUrlWithRetry(driver, next_page, 5) <= 0:
             return searchResult
-        for person in personList:
-            personInfo = []
-            try:
-                title = person.find_element_by_xpath('.//a[@class="W_texta W_fb"]').get_attribute('title')
-                print(title)
-                personInfo.append(title)
-            except:
-                continue
-            try:
-                fans = person.find_elements_by_xpath('.//a[@class="W_linkb"]')[2].text.replace('万', '0000')
-                print(fans)
-                #personInfo.append(int(fans))
-            except:
-                #personInfo.append('')
-                pass
+        while next_page:
+            time.sleep(randint(5,15))
+            # element = WebDriverWait(driver, 30).until(
+            #     EC.presence_of_element_located((By.XPATH, "//div[@id='pl_user_feedList']"))
+            #     )
+            #driver.execute_script("window.scrollTo(500, document.body.scrollHeight-500);")
+            driver.execute_script("window.scrollTo(500, 1000);")
 
-            # try:
-            #     desc = person.find_element_by_xpath('.//p[@class="person_card"]').text
-            #     print(desc)
-            #     personInfo.append(desc)
-            # except:
-            #     personInfo.append('')
-            #     pass
             try:
-                link = person.find_elements_by_xpath('.//a[@class="W_linkb"]')[0].get_attribute('href').split('?')[0]
-                print(link)
-                personInfo.append(link)
-            except:
-                personInfo.append('')
-                pass
-            if fans >= 10000:
-                searchResult.append(personInfo)
-            #writer.writerow(searchResult)
-            print("---- %d ----" % len(searchResult))
-
-        if _page < MAX_PAGE:
-            try:
-                next_page = driver.find_element(By.XPATH, '//a[text()="下一页"]')
-                driver.execute_script("window.scrollTo(500, document.body.scrollHeight-500);")
-                #next_page.click()
-                print(next_page.get_attribute('href'))
-                if openUrlWithRetry(driver, next_page.get_attribute('href'), 3) <= 0:
-                    next_page = ""
+                personList = driver.find_elements_by_xpath('//div[@id="pl_user_feedList"]//div[@class="list_person clearfix"]')
             except NoSuchElementException:
+                print("NoSuchElementException")
+                return searchResult
+            for person in personList:
+                personInfo = []
+                try:
+                    title = person.find_element_by_xpath('.//a[@class="W_texta W_fb"]').get_attribute('title')
+                    print(title)
+                    personInfo.append(title)
+                except:
+                    continue
+                try:
+                    fans = person.find_elements_by_xpath('.//a[@class="W_linkb"]')[2].text.replace('万', '0000')
+                    print(fans)
+                    #personInfo.append(int(fans))
+                except:
+                    #personInfo.append('')
+                    pass
+
+                # try:
+                #     desc = person.find_element_by_xpath('.//p[@class="person_card"]').text
+                #     print(desc)
+                #     personInfo.append(desc)
+                # except:
+                #     personInfo.append('')
+                #     pass
+                try:
+                    link = person.find_elements_by_xpath('.//a[@class="W_linkb"]')[0].get_attribute('href').split('?')[0]
+                    print(link)
+                    personInfo.append(link)
+                except:
+                    personInfo.append('')
+                    pass
+                if int(fans) >= 10000:
+                    already = 0
+                    for res in searchResult:
+                        if res[1] == personInfo[1]:
+                            already = 1
+                            break
+                    if already == 0:
+                        searchResult.append(personInfo)
+                print("---- %d ----" % len(searchResult))
+
+            if _page < MAX_PAGE:
+                try:
+                    next_page = driver.find_element(By.XPATH, '//a[text()="下一页"]')
+                    driver.execute_script("window.scrollTo(500, document.body.scrollHeight-500);")
+                    #next_page.click()
+                    print(next_page.get_attribute('href'))
+                    if openUrlWithRetry(driver, next_page.get_attribute('href'), 3) <= 0:
+                        next_page = ""
+                except NoSuchElementException:
+                    next_page = ""
+                    print ("No more next page")
+            else:
                 next_page = ""
-                print ("No more next page")
-        else:
-            next_page = ""
-        _page += 1
+            _page += 1
     return searchResult
 
 def searchCrawler(driver, keyword, MAX_PAGE):
@@ -232,6 +241,7 @@ def updateMysqlDB(sql):
     mysqlDB.close()
 
 def personCrawler(driver, url):
+    #listAction = ['//a[text()="文章"]', '//a[text()="全部"]', '//a[text()="原创"]']
     listAction = ['//a[text()="全部"]', '//a[text()="原创"]']
     fans = ''
     description = ''
@@ -324,36 +334,40 @@ def personCrawler(driver, url):
                 if idx == 1:
                     cardType = 0    # 'others'
                     try:
-                        mediaBox = card.find_element_by_xpath('.//div[@class="media_box"]]')
-                    except:
-                        pass
+                        mediaBox = card.find_element_by_xpath('.//div[@class="media_box"]')
+                    except Exception as ex:
+                        print(ex)
                     try:
-                        if mediaBox.find_elements_by_xpath('.//ul/li[@action-type="fl_pics"]'):
+                        if mediaBox.find_elements_by_xpath('./ul/li[@action-type="fl_pics"]'):
                             cardType = 1    # 'picture'
                     except:
                         pass
                     try:
-                        if mediaBox.find_elements_by_xpath('.//ul/li[@node-type="fl_h5_video"]'):
+                        if mediaBox.find_elements_by_xpath('./ul/li[@node-type="fl_h5_video"]'):
                             cardType = 2    # 'video'
                     except:
                         pass
                     try:
-                        if mediaBox.find_elements_by_xpath('.//div[@action-type="widget_articleLayer"]'):
+                        if mediaBox.find_elements_by_xpath('./div[@action-type="widget_articleLayer"]'):
                             cardType = 3    # 'article'
-                            mediaBox.find_elements_by_xpath('.//div[@action-type="widget_articleLayer"]/div[1]/div/a').click()
+                            mediaBox.find_element_by_xpath('./div[@action-type="widget_articleLayer"]/div[1]/div').click()
 
                             # get view number of article
-                            iframe = driver.find_elements_by_xpath('//iframe[contains(@name, "articleLayer")]')[1]
+                            #iframe = driver.find_element_by_xpath('//iframe[contains(@name, "articleLayer")]')
+                            iframe = WebDriverWait(driver, 30).until(EC.presence_of_element_located((By.XPATH, '//iframe[contains(@name, "articleLayer")]')))
                             driver.switch_to_frame(iframe)
-                            author = driver.find_element_by_xpath('//div[@class="main_editor"]/div[contains(@class, "authorinfo")]/div/span/a').get_attribute('href')
+                            author = driver.find_element_by_xpath('//div[contains(@class, "authorinfo")]/div/span/a').get_attribute('href')
+                            print('author: %s' % author)
                             if url == author:
-                                read = driver.find_element_by_xpath('//div[@class="main_editor"]/div[contains(@class, "authorinfo")]/div[@class="W_fr"]/span[@class="num"]').text
+                                read = driver.find_element_by_xpath('//div[contains(@class, "authorinfo")]/div[@class="W_fr"]/span[@class="num"]').text
                                 read.replace('万', '0000')
                                 read = re.sub("[^0123456789\.]", '', read)
                                 listArticleRead.append(int(read))
+                                print('read: %s' % read)
+                            driver.find_element_by_xpath('//div[@node-type="sidebar"]/a[1]').click()
                             driver.switch_to_default_content()
-                    except:
-                        pass
+                    except Exception as ex:
+                        print(ex)
                     postType[cardType] += 1
                     print('type: %d' % cardType)
 
@@ -467,7 +481,7 @@ def searchKeyword(driver, product_seg, circle, keyword, MAX_PAGE):
     # remove duplicate person
     for p2 in personList2:
         for p1 in personList:
-            if p2[1] == p1[3]:
+            if p2[1] == p1[1]:
                 personList2.remove(p2)
                 break
     # merge lists
@@ -481,13 +495,13 @@ def searchKeyword(driver, product_seg, circle, keyword, MAX_PAGE):
 
     for person in personList:
         thePerson = person[:]
-        fans, description, avgForward, avgComment, resForward, resComment, lastPostTime, postType, resArticleRead = personCrawler(driver, thePerson[3])
+        fans, description, avgForward, avgComment, resForward, resComment, lastPostTime, postType, resArticleRead = personCrawler(driver, thePerson[1])
         if int(fans) < 10000:
             continue
-        thePerson.insert(0, product_seg)   # product
-        thePerson.insert(1, circle)   # circle
-        thePerson.insert(2, keyword)   # keyword
-        thePerson[4] = fans
+        thePerson.insert(0, product_seg)
+        thePerson.insert(1, circle)
+        thePerson.insert(2, keyword)
+        thePerson.insert(4, fans)
         thePerson.insert(5, ("%s, %d" % (resForward[0], avgForward[0])))
         thePerson.insert(6, ("%s, %d" % (resComment[0], avgComment[0])))
         thePerson.insert(7, ("%s" % lastPostTime[0]))
@@ -495,7 +509,7 @@ def searchKeyword(driver, product_seg, circle, keyword, MAX_PAGE):
         thePerson.insert(9, ("%s, %d" % (resComment[1], avgComment[1])))
         thePerson.insert(10, ("%s" % lastPostTime[1]))
         thePerson.insert(11, ("%d-%d-%d-%d" % (postType[1], postType[2], postType[3], postType[0])))
-        thePerson[12] = description
+        thePerson.insert(12, description)
         thePerson.append("V" if "官方" in thePerson[12] else "")
         thePerson.append(resArticleRead)
 
