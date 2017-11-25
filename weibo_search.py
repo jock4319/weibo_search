@@ -243,7 +243,7 @@ def updateMysqlDB(sql):
 def personCrawler(driver, url):
     #listAction = ['//a[text()="文章"]', '//a[text()="全部"]', '//a[text()="原创"]']
     listAction = ['//a[text()="全部"]', '//a[text()="原创"]']
-    fans = ''
+    fans = 0
     description = ''
     avgForward = [0, 0]
     avgComment = [0, 0]
@@ -269,7 +269,9 @@ def personCrawler(driver, url):
             try:
                 fans = driver.find_element_by_xpath('//table[@class="tb_counter"]//span[text()="粉丝"]').find_element_by_xpath('../strong').text
                 print(fans + "粉丝")
+                fans = int(fans)
             except Exception as ex:
+                fans = 0
                 print(ex)
             try:
                 description = driver.find_element_by_xpath('//div[@class="PCD_person_info"]/div/p[@class="info"]').text
@@ -488,22 +490,16 @@ def searchKeyword(driver, product_seg, circle, keyword, MAX_PAGE):
                 break
     # merge lists
     personList = personList + personList2
-    # for p2 in personList2:
-    #     p221 = []
-    #     p221.append(p2[0])
-    #     p221.append(p2[1])
-    #     personList.append(p221)
-
 
     for person in personList:
         thePerson = person[:]
         fans, description, avgForward, avgComment, resForward, resComment, lastPostTime, postType, resArticleRead = personCrawler(driver, thePerson[1])
-        if int(fans) < 10000:
+        if fans < 10000:
             continue
         thePerson.insert(0, product_seg)
         thePerson.insert(1, circle)
         thePerson.insert(2, keyword)
-        thePerson.insert(4, fans)
+        thePerson.insert(4, str(fans))
         thePerson.insert(5, ("%s, %d" % (resForward[0], avgForward[0])))
         thePerson.insert(6, ("%s, %d" % (resComment[0], avgComment[0])))
         thePerson.insert(7, ("%s" % lastPostTime[0]))
