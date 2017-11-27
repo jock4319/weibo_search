@@ -240,7 +240,9 @@ def updateMysqlDB(sql):
         mysqlDB.rollback()
     mysqlDB.close()
 
-def personCrawler(driver, url):
+def personCrawler(driver, person):
+    title = person[0]
+    url = person[1]
     #listAction = ['//a[text()="文章"]', '//a[text()="全部"]', '//a[text()="原创"]']
     listAction = ['//a[text()="全部"]', '//a[text()="原创"]']
     fans = 0
@@ -359,9 +361,11 @@ def personCrawler(driver, url):
                             #iframe = driver.find_element_by_xpath('//iframe[contains(@name, "articleLayer")]')
                             iframe = WebDriverWait(driver, 30).until(EC.presence_of_element_located((By.XPATH, '//iframe[contains(@name, "articleLayer")]')))
                             driver.switch_to_frame(iframe)
-                            author = driver.find_element_by_xpath('//div[contains(@class, "authorinfo")]/div/span/a').get_attribute('href')
+                            #author = driver.find_element_by_xpath('//div[contains(@class, "authorinfo")]/div/span/a').get_attribute('href')
+                            author = driver.find_element_by_xpath('//div[contains(@class, "authorinfo")]/div/span/a').text
                             print('author: %s' % author)
-                            if url == author:
+                            #if url == author:
+                            if title == author:
                                 read = driver.find_element_by_xpath('//div[contains(@class, "authorinfo")]/div[@class="W_fr"]/span[@class="num"]').text
                                 read.replace('万', '0000')
                                 read = re.sub("[^0123456789\.]", '', read)
@@ -493,7 +497,7 @@ def searchKeyword(driver, product_seg, circle, keyword, MAX_PAGE):
 
     for person in personList:
         thePerson = person[:]
-        fans, description, avgForward, avgComment, resForward, resComment, lastPostTime, postType, resArticleRead = personCrawler(driver, thePerson[1])
+        fans, description, avgForward, avgComment, resForward, resComment, lastPostTime, postType, resArticleRead = personCrawler(driver, thePerson)
         if fans < 10000:
             continue
         thePerson.insert(0, product_seg)
@@ -502,10 +506,10 @@ def searchKeyword(driver, product_seg, circle, keyword, MAX_PAGE):
         thePerson.insert(4, str(fans))
         thePerson.insert(5, ("%s, %d" % (resForward[0], avgForward[0])))
         thePerson.insert(6, ("%s, %d" % (resComment[0], avgComment[0])))
-        thePerson.insert(7, ("%s" % lastPostTime[0]))
+        thePerson.insert(7, ("%s" % (lastPostTime[0] if lastPostTime[0] != DEFAULT_DATE else "-")))
         thePerson.insert(8, ("%s, %d" % (resForward[1], avgForward[1])))
         thePerson.insert(9, ("%s, %d" % (resComment[1], avgComment[1])))
-        thePerson.insert(10, ("%s" % lastPostTime[1]))
+        thePerson.insert(10, ("%s" % (lastPostTime[1] if lastPostTime[1] != DEFAULT_DATE else "-")))
         thePerson.insert(11, ("%d-%d-%d-%d" % (postType[1], postType[2], postType[3], postType[0])))
         thePerson.insert(12, description)
         thePerson.append("V" if "官方" in thePerson[12] else "")
@@ -532,7 +536,7 @@ def searchKeyword(driver, product_seg, circle, keyword, MAX_PAGE):
             field2Insert += "ori_lastPostTime, "
             value2Insert += str(lastPostTime[1]) + "', '"
         sql = "INSERT INTO Weibo (product_seg, circle, keyword, influencer, follower, " + field2Insert + "post_type, description, link, article_read)" \
-            + "VALUES ('" + thePerson[0] + "', '" + thePerson[1] + "', '" + thePerson[2] + "', '" + thePerson[3] + "', '" + fans + "', '" \
+            + "VALUES ('" + thePerson[0] + "', '" + thePerson[1] + "', '" + thePerson[2] + "', '" + thePerson[3] + "', '" + str(fans) + "', '" \
             + value2Insert + thePerson[11] + "', '" + thePerson[12] + "', '" + thePerson[13] + "', '" + resArticleRead + "')"
         print(sql)
         updateMysqlDB(sql)
