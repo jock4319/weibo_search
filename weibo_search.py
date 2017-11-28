@@ -10,9 +10,10 @@ from selenium.webdriver.support import expected_conditions as EC
 #from pyvirtualdisplay import Display
 import datetime, time, codecs, csv, os
 import sys, getopt
-from urllib.parse import quote
+from urllib.parse import quote, urljoin
 import re
 from random import randint
+from lxml import etree
 #from UnicodeSupportForCsv import UnicodeReader, UnicodeWriter
 
 DEFAULT_DATE = datetime.datetime(2000, 1, 1)
@@ -74,21 +75,30 @@ def searchUserCrawler(driver, keyword, MAX_PAGE):
             #driver.execute_script("window.scrollTo(500, document.body.scrollHeight-500);")
             driver.execute_script("window.scrollTo(500, 1000);")
 
+            htmlBody = driver.page_source
+            html = etree.HTML(htmlBody, base_url=driver.current_url)
+
             try:
-                personList = driver.find_elements_by_xpath('//div[@id="pl_user_feedList"]//div[@class="list_person clearfix"]')
+                #personList = driver.find_elements_by_xpath('//div[@id="pl_user_feedList"]//div[@class="list_person clearfix"]')
+                personList = html.xpath('//div[@id="pl_user_feedList"]//div[@class="list_person clearfix"]')
+                if len(personList) == 0:
+                    print("search no result")
+                    return searchResult
             except NoSuchElementException:
                 print("NoSuchElementException")
                 return searchResult
             for person in personList:
                 personInfo = []
                 try:
-                    title = person.find_element_by_xpath('.//a[@class="W_texta W_fb"]').get_attribute('title')
+                    #title = person.find_element_by_xpath('.//a[@class="W_texta W_fb"]').get_attribute('title')
+                    title = person.xpath('.//a[@class="W_texta W_fb"]')[0].attrib['title']
                     print(title)
                     personInfo.append(title)
                 except:
                     continue
                 try:
-                    fans = person.find_elements_by_xpath('.//a[@class="W_linkb"]')[2].text.replace('万', '0000')
+                    #fans = person.find_elements_by_xpath('.//a[@class="W_linkb"]')[2].text.replace('万', '0000')
+                    fans = person.xpath('.//a[@class="W_linkb"]')[2].text.replace('万', '0000')
                     print(fans)
                     #personInfo.append(int(fans))
                 except:
@@ -103,7 +113,8 @@ def searchUserCrawler(driver, keyword, MAX_PAGE):
                 #     personInfo.append('')
                 #     pass
                 try:
-                    link = person.find_elements_by_xpath('.//a[@class="W_linkb"]')[0].get_attribute('href').split('?')[0]
+                    #link = person.find_elements_by_xpath('.//a[@class="W_linkb"]')[0].get_attribute('href').split('?')[0]
+                    link = urljoin(driver.current_url, person.xpath('.//a[@class="W_linkb"]/@href')[0].split('?')[0])
                     print(link)
                     personInfo.append(link)
                 except:
@@ -121,17 +132,22 @@ def searchUserCrawler(driver, keyword, MAX_PAGE):
 
             if _page < MAX_PAGE:
                 try:
-                    next_page = driver.find_element(By.XPATH, '//a[text()="下一页"]')
-                    driver.execute_script("window.scrollTo(500, document.body.scrollHeight-500);")
-                    #next_page.click()
-                    print(next_page.get_attribute('href'))
-                    if openUrlWithRetry(driver, next_page.get_attribute('href'), 3) <= 0:
-                        next_page = ""
+                    #next_page = driver.find_element(By.XPATH, '//a[text()="下一页"]').get_attribute('href')
+                    nextPage = html.xpath('//a[text()="下一页"]/@href')
+                    if len(nextPage) > 0:
+                        next_page = urljoin(driver.current_url, nextPage[0])
+                        driver.execute_script("window.scrollTo(0, document.body.scrollHeight);")
+                        #next_page.click()
+                        print(next_page)
+                        if openUrlWithRetry(driver, next_page, 3) <= 0:
+                            break
+                    else:
+                        break
                 except NoSuchElementException:
-                    next_page = ""
                     print ("No more next page")
+                    break
             else:
-                next_page = ""
+                break
             _page += 1
     return searchResult
 
@@ -151,42 +167,53 @@ def searchCrawler(driver, keyword, MAX_PAGE):
         #driver.execute_script("window.scrollTo(500, document.body.scrollHeight-500);")
         driver.execute_script("window.scrollTo(500, 1000);")
 
+        htmlBody = driver.page_source
+        html = etree.HTML(htmlBody, base_url=driver.current_url)
+
         # star list
         try:
-            personList = driver.find_elements_by_xpath('//div[@class="list_star clearfix"]/div[@class="star_detail"]/p[@class="star_name"]/a[@class="name_txt"]')
+            #personList = driver.find_elements_by_xpath('//div[@class="list_star clearfix"]/div[@class="star_detail"]/p[@class="star_name"]/a[@class="name_txt"]')
+            personList = html.xpath('//div[@class="list_star clearfix"]/div[@class="star_detail"]/p[@class="star_name"]/a[@class="name_txt"]')
+            if len(personList) == 0:
+                print("no result")
         except NoSuchElementException:
             print("NoSuchElementException")
-            return searchResult
+            #return searchResult
         for person in personList:
             personInfo = []
             try:
-                title = person.text
-                link = person.get_attribute('href').split('?')[0]
+                title = person.text.strip()
+                #link = person.get_attribute('href').split('?')[0]
+                link = urljoin(driver.current_url, person.attrib['href'].split('?')[0])
                 print(title + ": " + link)
                 personInfo.append(title)
                 personInfo.append(link)
             except:
-                continue
+                pass
             searchResult.append(personInfo)
             #writer.writerow(searchResult)
             print("---- %d ----" % len(searchResult))
 
         # feed list
         try:
-            personList = driver.find_elements_by_xpath('//div[@action-type="feed_list_item"]//div[contains(@class, "feed_content")]/a[1]')
+            #personList = driver.find_elements_by_xpath('//div[@action-type="feed_list_item"]//div[contains(@class, "feed_content")]/a[1]')
+            personList = html.xpath('//div[@action-type="feed_list_item"]//div[contains(@class, "feed_content")]/a[1]')
+            if len(personList) == 0:
+                print("no result")
         except NoSuchElementException:
             print("NoSuchElementException")
-            return searchResult
+            #return searchResult
         for person in personList:
             personInfo = []
             try:
-                title = person.text
-                link = person.get_attribute('href').split('?')[0]
+                title = person.text.strip()
+                #link = person.get_attribute('href').split('?')[0]
+                link = urljoin(driver.current_url, person.attrib['href'].split('?')[0])
                 print(title + ": " + link)
                 personInfo.append(title)
                 personInfo.append(link)
             except:
-                continue
+                pass
             searchResult.append(personInfo)
             #writer.writerow(searchResult)
             print("---- %d ----" % len(searchResult))
@@ -194,17 +221,21 @@ def searchCrawler(driver, keyword, MAX_PAGE):
 
         if _page < MAX_PAGE:
             try:
-                next_page = driver.find_element(By.XPATH, '//a[text()="下一页"]')
-                driver.execute_script("window.scrollTo(500, document.body.scrollHeight-500);")
-                #next_page.click()
-                print(next_page.get_attribute('href'))
-                if openUrlWithRetry(driver, next_page.get_attribute('href'), 3) <= 0:
-                    next_page = ""
+                #next_page = driver.find_element(By.XPATH, '//a[text()="下一页"]').get_attribute('href')
+                nextPage = html.xpath('//a[text()="下一页"]/@href')
+                if len(nextPage) > 0:
+                    next_page = urljoin(driver.current_url, nextPage[0])
+                    driver.execute_script("window.scrollTo(0, document.body.scrollHeight);")
+                    print(next_page)
+                    if openUrlWithRetry(driver, next_page, 3) <= 0:
+                        break
+                else:
+                    break
             except NoSuchElementException:
-                next_page = ""
                 print ("No more next page")
+                break
         else:
-            next_page = ""
+            break
         _page += 1
     return searchResult
 
@@ -241,10 +272,14 @@ def updateMysqlDB(sql):
     mysqlDB.close()
 
 def personCrawler(driver, person, keyword):
+    PAGE = 2
     title = person[0]
     url = person[1]
     #listAction = ['//a[text()="文章"]', '//a[text()="全部"]', '//a[text()="原创"]']
-    listAction = ['//a[text()="全部"]', '//a[text()="原创"]']
+    #listAction = ['//a[text()="全部"]', '//a[text()="原创"]']
+    listQuery = ['?profile_ftype=1&is_all=1#_0', '?profile_ftype=1&is_ori=1#_0', \
+        '?is_search=0&visible=0&is_all=1&is_tag=0&profile_ftype=1&page=2#feedtop', \
+        '?is_search=0&visible=0&is_ori=1&is_tag=0&profile_ftype=1&page=2#feedtop']
     fans = 0
     description = ''
     avgForward = [0, 0]
@@ -261,95 +296,126 @@ def personCrawler(driver, person, keyword):
     countContent = 0
     ratioContent = ''
 
-    if openUrlWithRetry(driver, url, 5) > 0:
-        print(url)
-    else:
-        return fans, description, avgForward, avgComment, resForward, resComment, lastPostTime, postType, resArticleRead, ratioContent
+    # if openUrlWithRetry(driver, url, 5) > 0:
+    #     print(url)
+    # else:
+    #     return fans, description, avgForward, avgComment, resForward, resComment, lastPostTime, postType, resArticleRead, ratioContent
 
-    for page in range(2):
+    for page in range(PAGE):
 
-        time.sleep(randint(5,15))
+        #time.sleep(randint(5,15))
 
-        if page == 0:
-            try:
-                title = driver.find_element_by_xpath('//div[@class="pf_username"]/h1').text
-                print(title)
-            except Exception as ex:
-                print(ex)
-            try:
-                description = driver.find_element_by_xpath('//div[@class="pf_intro"]').text
-                print(description)
-            except Exception as ex:
-                print(ex)
-            try:
-                fans = driver.find_element_by_xpath('//table[@class="tb_counter"]//span[text()="粉丝"]').find_element_by_xpath('../strong').text
-                print(fans + "粉丝")
-                fans = int(fans)
-            except Exception as ex:
-                fans = 0
-                print(ex)
+        #for idx in range(len(listAction)):
+        for idx in range(PAGE):
+
             # try:
-            #     description = driver.find_element_by_xpath('//div[@class="PCD_person_info"]/div/p[@class="info"]').text
-            #     print(description)
+            #     ele = driver.find_element(By.XPATH, listAction[idx])
+            #     if not ele.is_displayed():
+            #         try:
+            #             # driver.execute_script("document.getElementsByClassName('layer_menu_list')[0].style.display='inline-block';")
+            #             driver.find_element_by_xpath('//li[@node-type="tab_other"]/a[1]').click()
+            #             ele = WebDriverWait(driver, 60).until(EC.visibility_of_element_located((By.XPATH, listAction[idx])))
+            #
+            #             # driver.find_element_by_xpath('//div[@class="layer_menu_list"]/li[@action-data="profile_ftype=1&is_ori=1"]/a').click()
+            #         except Exception as ex:
+            #             print("Failed to show element")
+            #             print(ex)
+            #     ele.click()
+            #
             # except Exception as ex:
+            #     print("Failed to click... %s" % listAction[idx])
             #     print(ex)
+            #     continue
 
-        for idx in range(len(listAction)):
+            if openUrlWithRetry(driver, url + listQuery[page*2+idx], 5) > 0:
+                print(url)
+                time.sleep(randint(5,8))
+            else:
+                return fans, description, avgForward, avgComment, resForward, resComment, lastPostTime, postType, resArticleRead, ratioContent
 
-            try:
-                ele = driver.find_element(By.XPATH, listAction[idx])
-                if not ele.is_displayed():
-                    try:
-                        # driver.execute_script("document.getElementsByClassName('layer_menu_list')[0].style.display='inline-block';")
-                        driver.find_element_by_xpath('//li[@node-type="tab_other"]/a[1]').click()
-                        ele = WebDriverWait(driver, 60).until(EC.visibility_of_element_located((By.XPATH, listAction[idx])))
+            # driver.execute_script("window.scrollTo(0, document.body.scrollHeight);")
+            # time.sleep(5)
+            # driver.execute_script("window.scrollTo(0, document.body.scrollHeight);")
+            # time.sleep(5)
+            # driver.execute_script("window.scrollTo(0, document.body.scrollHeight);")
+            # time.sleep(10)
 
-                        # driver.find_element_by_xpath('//div[@class="layer_menu_list"]/li[@action-data="profile_ftype=1&is_ori=1"]/a').click()
-                    except:
-                        print("Failed to show element")
-                ele.click()
-
-            except Exception as ex:
-                print("Failed to click... %s" % listAction[idx])
-                print(ex)
-                continue
-
-            driver.execute_script("window.scrollTo(0, document.body.scrollHeight*3/4);")
-            time.sleep(1)
+            for i in range(10):
+                driver.execute_script("window.scrollTo(0, document.body.scrollHeight);")
+                try:
+                    wait = WebDriverWait(driver, 20)
+                    wait.until(EC.presence_of_element_located((By.XPATH, '//div[@class="W_pages"]')))
+                    break
+                except:
+                    #print("Maybe no next page...")
+                    pass
             driver.execute_script("window.scrollTo(0, document.body.scrollHeight);")
-            time.sleep(randint(3,10))
-            driver.execute_script("window.scrollTo(0, document.body.scrollHeight);")
-            try:
-                wait = WebDriverWait(driver, 20)
-                wait.until(EC.visibility_of_element_located((By.XPATH, '//div[@class="W_pages"]')))
-            except:
-                print("Maybe no next page...")
+            time.sleep(5)
+
+            htmlBody = driver.page_source
+            #htmlBody = driver.find_element_by_tag_name('html').get_attribute('innerHTML')
+            html = etree.HTML(htmlBody, base_url=driver.current_url)
+            if page == 0 and idx == 0:
+                try:
+                    #title = driver.find_element_by_xpath('//div[@class="pf_username"]/h1').text
+                    title = html.xpath('//div[@class="pf_username"]/h1')[0].text
+                    print(title)
+                except Exception as ex:
+                    print(ex)
+                try:
+                    #description = driver.find_element_by_xpath('//div[@class="pf_intro"]').text
+                    description = html.xpath('//div[@class="pf_intro"]')[0].text.strip()
+                    print(description)
+                except Exception as ex:
+                    print(ex)
+                try:
+                    #fans = driver.find_element_by_xpath('//table[@class="tb_counter"]//span[text()="粉丝"]').find_element_by_xpath('../strong').text
+                    fans = html.xpath('//table[@class="tb_counter"]//span[text()="粉丝"]')[0].xpath('../strong')[0].text
+                    print(fans + "粉丝")
+                    fans = int(fans)
+                except Exception as ex:
+                    fans = 0
+                    print(ex)
+                # try:
+                #     description = driver.find_element_by_xpath('//div[@class="PCD_person_info"]/div/p[@class="info"]').text
+                #     print(description)
+                # except Exception as ex:
+                #     print(ex)
+
+            # htmlBody = driver.page_source
+            # html = etree.HTML(htmlBody, base_url=driver.current_url)
 
             try:
-                cardList = driver.find_elements_by_xpath('//div[@node-type="feed_list"]/div[@action-type="feed_list_item"]')
+                #cardList = driver.find_elements_by_xpath('//div[@node-type="feed_list"]/div[@action-type="feed_list_item"]')
+                cardList = html.xpath('//div[@node-type="feed_list"]/div[@action-type="feed_list_item"]')
             except NoSuchElementException:
                 print("NoSuchElementException")
 
             for card in cardList:
                 # check if this is liked post
                 try:
-                    card.find_element_by_xpath('.//h4[@class="obj_name S_txt2"]')
-                    print("This is liked post, skip...")
-                    continue
+                    #print("xxxxx %d" % len(card.xpath('./div/h4[@class="obj_name S_txt2"]')))
+                    #card.find_element_by_xpath('./div/h4[@class="obj_name S_txt2"]')
+                    if len(card.xpath('./div/h4[@class="obj_name S_txt2"]')) > 0:
+                        print("This is liked post, skip...")
+                        continue
                 except:
                     pass
                 # check if this is system post for birthday
                 try:
-                    if card.find_element_by_xpath('.//a[@action-type="app_source"]').text == '生日动态':
+                    #print("xxxxx %d" % len(card.xpath('.//a[@action-type="app_source"]')))
+                    #if card.find_element_by_xpath('.//a[@action-type="app_source"]').text == '生日动态':
+                    if card.xpath('.//a[@action-type="app_source"]')[0].text == '生日动态':
                         print("This is birthday post, skip...")
-                    continue
+                        continue
                 except:
                     pass
                 # get post date
                 try:
-                    element = card.find_element_by_xpath('.//a[@node-type="feed_list_item_date"]')
-                    driver.execute_script("arguments[0].scrollIntoView();", element)
-                    strPostTime = element.get_attribute('title')
+                    # element = card.find_element_by_xpath('.//a[@node-type="feed_list_item_date"]')
+                    # driver.execute_script("arguments[0].scrollIntoView();", element)
+                    # strPostTime = element.get_attribute('title')
+                    strPostTime = card.xpath('.//a[@node-type="feed_list_item_date"]')[0].attrib['title']
                     postTime = datetime.datetime.strptime(strPostTime, '%Y-%m-%d %H:%M')
                     #print("%s == %s" % (strPostTime, postTime))
                 except:
@@ -360,24 +426,32 @@ def personCrawler(driver, person, keyword):
                 if idx == 1:
                     cardType = 0    # 'others'
                     try:
-                        mediaBox = card.find_element_by_xpath('.//div[@class="media_box"]')
+                        #mediaBox = card.find_element_by_xpath('.//div[@class="media_box"]')
+                        mediaBox = card.xpath('.//div[@class="media_box"]')[0]
                     except Exception as ex:
                         print(ex)
+                        print('No media box')
                         mediaBox = None
                     try:
-                        if mediaBox.find_elements_by_xpath('./ul/li[@action-type="fl_pics"]'):
+                        #if mediaBox.find_elements_by_xpath('./ul/li[@action-type="fl_pics"]'):
+                        if len(mediaBox.xpath('./ul/li[@action-type="fl_pics"]')) > 0:
                             cardType = 1    # 'picture'
                     except:
                         pass
                     try:
-                        if mediaBox.find_elements_by_xpath('./ul/li[@node-type="fl_h5_video"]'):
+                        #if mediaBox.find_elements_by_xpath('./ul/li[@node-type="fl_h5_video"]'):
+                        if len(mediaBox.xpath('./ul/li[@node-type="fl_h5_video"]')) > 0:
                             cardType = 2    # 'video'
                     except:
                         pass
                     try:
-                        if mediaBox.find_elements_by_xpath('./div[@action-type="widget_articleLayer"]'):
+                        #if mediaBox.find_elements_by_xpath('./div[@action-type="widget_articleLayer"]'):
+                        if len(mediaBox.xpath('./div[@action-type="widget_articleLayer"]')) > 0:
                             cardType = 3    # 'article'
-                            mediaBox.find_element_by_xpath('./div[@action-type="widget_articleLayer"]/div[1]/div').click()
+                            #mediaBox.find_element_by_xpath('./div[@action-type="widget_articleLayer"]/div[1]/div').click()
+                            tree = etree.ElementTree(driver)
+                            print(tree.getpath(mediaBox.xpath('./div[@action-type="widget_articleLayer"]')[0]))
+                            driver.find_element_by_xpath(tree.getpath(mediaBox.xpath('./div[@action-type="widget_articleLayer"]')[0])).click()
 
                             # get view number of article
                             #iframe = driver.find_element_by_xpath('//iframe[contains(@name, "articleLayer")]')
@@ -402,14 +476,16 @@ def personCrawler(driver, person, keyword):
 
                 # get forward number
                 try:
-                    forwardNum = card.find_element_by_xpath('.//span[@node-type="forward_btn_text"]//em[2]').text
+                    #forwardNum = card.find_element_by_xpath('.//span[@node-type="forward_btn_text"]//em[2]').text
+                    forwardNum = card.xpath('.//span[@node-type="forward_btn_text"]//em[2]')[0].text
                     print(forwardNum)
                     forward[idx].append(int(forwardNum))
                 except:
                     pass
                 # get comment number
                 try:
-                    commentNum = card.find_element_by_xpath('.//span[@node-type="comment_btn_text"]//em[2]').text
+                    #commentNum = card.find_element_by_xpath('.//span[@node-type="comment_btn_text"]//em[2]').text
+                    commentNum = card.xpath('.//span[@node-type="comment_btn_text"]//em[2]')[0].text
                     print(commentNum)
                     comment[idx].append(int(commentNum))
                 except:
@@ -422,24 +498,25 @@ def personCrawler(driver, person, keyword):
             # gather all text content
             if idx == 1:
                 try:
-                    listContent += driver.find_elements_by_xpath('//div[@node-type="feed_list_content"]')
+                    #listContent += (driver.find_elements_by_xpath('//div[@node-type="feed_list_content"]'))
+                    listContent += (html.xpath('//div[@node-type="feed_list_content"]'))
                 except Exception as ex:
                     print(ex)
 
-        try:
-            next_page = driver.find_element(By.XPATH, '//a[text()="下一页"]')
-            driver.execute_script("window.scrollTo(0, document.body.scrollHeight);")
-            #next_page.click()
-            print(next_page.get_attribute('href'))
-            if openUrlWithRetry(driver, next_page.get_attribute('href'), 3) <= 0:
-                print ("Get next page failed")
-                break
-        except NoSuchElementException:
-            print ("No more next page")
-            break
+        # try:
+        #     next_page = driver.find_element(By.XPATH, '//a[text()="下一页"]')
+        #     driver.execute_script("window.scrollTo(0, document.body.scrollHeight);")
+        #     #next_page.click()
+        #     print(next_page.get_attribute('href'))
+        #     if openUrlWithRetry(driver, next_page.get_attribute('href'), 3) <= 0:
+        #         print ("Get next page failed")
+        #         break
+        # except NoSuchElementException:
+        #     print ("No more next page")
+        #     break
 
     # calculate forward and comment number
-    for idx in range(len(listAction)):
+    for idx in range(PAGE):
         if len(forward[idx]) > 0:
             avgForward[idx] = round(sum(forward[idx]) / float(len(forward[idx])))
             resForward[idx] = ("%d~%d" % (min(forward[idx]), max(forward[idx])))
@@ -469,8 +546,9 @@ def personCrawler(driver, person, keyword):
     print("--- article read: %s" % resArticleRead)
 
     for content in listContent:
-        if keyword in content.text:
+        if keyword.lower() in content.text.lower():
             countContent += 1
+            print(content.text.strip())
     ratioContent = ('=(%d/%d)' % (countContent, len(listContent)))
     print("--- relate to keyword: %s" % ratioContent)
 
@@ -481,7 +559,8 @@ def openUrlWithRetry(driver, url, retry):
     while True:
         try:
             driver.get(url)
-        except: #TimeoutException:
+        except Exception as ex:
+            print(ex)
             print("Timeout, retrying...")
             countRetry-=1
             if countRetry <= 0:
@@ -608,13 +687,14 @@ def main(argv):
     #driver = createBrowserChrome()
     driver = createBrowserFirefox()
 
-    if filename != '':
+    if url != '':
+        person = ['', url]
+        personCrawler(driver, person, keyword)
+    elif filename != '':
         searchFile(driver, filename, MAX_PAGE)
     elif keyword != '':
         searchKeyword(driver, '', '', keyword, MAX_PAGE)
-    elif url != '':
-        person = ['', url]
-        personCrawler(driver, person, keyword)
+
 
     driver.quit()
 
