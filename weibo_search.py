@@ -68,10 +68,8 @@ def searchUserCrawler(driver, keyword, MAX_PAGE):
         if openUrlWithRetry(driver, next_page, 5) <= 0:
             return searchResult
         while next_page:
-            time.sleep(randint(5,15))
-            # element = WebDriverWait(driver, 30).until(
-            #     EC.presence_of_element_located((By.XPATH, "//div[@id='pl_user_feedList']"))
-            #     )
+            #time.sleep(randint(5,15))
+            element = WebDriverWait(driver, 30).until(EC.presence_of_element_located((By.XPATH, '//div[@class="pl_personlist"] | //div[@class="pl_noresult"]')))
             #driver.execute_script("window.scrollTo(500, document.body.scrollHeight-500);")
             driver.execute_script("window.scrollTo(500, 1000);")
 
@@ -160,10 +158,8 @@ def searchCrawler(driver, keyword, MAX_PAGE):
     if openUrlWithRetry(driver, next_page, 3) <= 0:
         return searchResult
     while next_page:
-        time.sleep(randint(5,15))
-        # element = WebDriverWait(driver, 30).until(
-        #     EC.presence_of_element_located((By.XPATH, "//div[@id='pl_user_feedList']"))
-        #     )
+        #time.sleep(randint(5,15))
+        element = WebDriverWait(driver, 30).until(EC.presence_of_element_located((By.XPATH, '//div[@node-type="feed_list"]')))
         #driver.execute_script("window.scrollTo(500, document.body.scrollHeight-500);")
         driver.execute_script("window.scrollTo(500, 1000);")
 
@@ -340,16 +336,16 @@ def personCrawler(driver, person, keyword):
             # driver.execute_script("window.scrollTo(0, document.body.scrollHeight);")
             # time.sleep(10)
 
-            for i in range(10):
-                driver.execute_script("window.scrollTo(0, document.body.scrollHeight);")
+            for i in range(20):
+                print("waiting for page load...")
                 try:
-                    wait = WebDriverWait(driver, 20)
+                    wait = WebDriverWait(driver, 10)
                     wait.until(EC.presence_of_element_located((By.XPATH, '//div[@class="W_pages"]')))
                     break
                 except:
                     #print("Maybe no next page...")
                     pass
-            driver.execute_script("window.scrollTo(0, document.body.scrollHeight);")
+                driver.execute_script("window.scrollTo(0, document.body.scrollHeight);")
             time.sleep(5)
 
             htmlBody = driver.page_source
@@ -515,6 +511,8 @@ def personCrawler(driver, person, keyword):
         #     print ("No more next page")
         #     break
 
+    print("--- post type: %d-%d-%d-%d" % (postType[1], postType[2], postType[3], postType[0]))
+
     # calculate forward and comment number
     for idx in range(PAGE):
         if len(forward[idx]) > 0:
@@ -533,6 +531,8 @@ def personCrawler(driver, person, keyword):
             avgComment[idx] = 0
             resComment[idx] = ("-")
         print("--- Average: %d, %d, count: %d, %d" % (round(avgForward[idx]), round(avgComment[idx]), len(forward[idx]), len(comment[idx])))
+        print("    %s, %d" % (resForward[idx], avgForward[idx]))
+        print("    %s, %d" % (resComment[idx], avgComment[idx]))
 
     # calculate 原創文章閱讀量（全range,均數)
     avgRead = 0
@@ -546,7 +546,8 @@ def personCrawler(driver, person, keyword):
     print("--- article read: %s" % resArticleRead)
 
     for content in listContent:
-        if keyword.lower() in content.text.lower():
+        contentText = "".join(content.itertext()).lower()
+        if keyword.lower() in contentText:
             countContent += 1
             print(content.text.strip())
     ratioContent = ('=(%d/%d)' % (countContent, len(listContent)))
@@ -572,7 +573,7 @@ def openUrlWithRetry(driver, url, retry):
             break
     return countRetry
 
-def searchFile(driver, filename, MAX_PAGE):
+def searchFile(filename, MAX_PAGE):
     try:
         f = open(filename, 'r', newline='', encoding='utf-8')
         reader = csv.reader(f)
@@ -586,9 +587,9 @@ def searchFile(driver, filename, MAX_PAGE):
         circle = item[1]
         keyword = item[2]
         print(repr("%s-%s-%s" % (product_seg, circle, keyword)))
-        searchKeyword(driver, product_seg, circle, keyword, MAX_PAGE)
+        searchKeyword(product_seg, circle, keyword, MAX_PAGE)
 
-def searchKeyword(driver, product_seg, circle, keyword, MAX_PAGE):
+def searchKeyword(product_seg, circle, keyword, MAX_PAGE):
     outfile = product_seg + "_" + circle + "_" + keyword + "_" + str(datetime.date.today()) + '.csv'
     isExist = os.path.exists(outfile)
     fout = open(outfile, 'a', newline='', encoding='utf-8')
@@ -597,8 +598,10 @@ def searchKeyword(driver, product_seg, circle, keyword, MAX_PAGE):
         fout.write('\ufeff')
         writer.writerow(["產品", "圈", "關鍵字", "微博名", "粉絲數", "全部轉發量（全range,均數）", "全部評論數（全range,均數）", "全部最後更新時間", "原創轉發量（全range,均數）",\
          "原創評論數（全range,均數）", "原創最後更新時間", "圖-影-文-其他", "微博上的自我介紹", "鏈結", "官方", "原創文章閱讀量（全range,均數)", "貼文相關性"])
+    driver = createBrowserFirefox()
     personList = searchUserCrawler(driver, keyword, MAX_PAGE)
     personList2 = searchCrawler(driver, keyword, MAX_PAGE)
+    driver.quit()
     # remove duplicate person
     for p2 in personList2:
         for p1 in personList:
@@ -608,6 +611,7 @@ def searchKeyword(driver, product_seg, circle, keyword, MAX_PAGE):
     # merge lists
     personList = personList + personList2
 
+    driver = createBrowserFirefox()
     for person in personList:
         thePerson = person[:]
         fans, description, avgForward, avgComment, resForward, resComment, lastPostTime, postType, resArticleRead, ratioContent = personCrawler(driver, thePerson, keyword)
@@ -655,6 +659,7 @@ def searchKeyword(driver, product_seg, circle, keyword, MAX_PAGE):
         print(sql)
         updateMysqlDB(sql)
         fout.flush()
+    driver.quit()
 
     fout.close()
 
@@ -685,18 +690,20 @@ def main(argv):
             url = arg
 
     #driver = createBrowserChrome()
-    driver = createBrowserFirefox()
+    #driver = createBrowserFirefox()
 
     if url != '':
+        driver = createBrowserFirefox()
         person = ['', url]
         personCrawler(driver, person, keyword)
+        driver.quit()
     elif filename != '':
-        searchFile(driver, filename, MAX_PAGE)
+        searchFile(filename, MAX_PAGE)
     elif keyword != '':
-        searchKeyword(driver, '', '', keyword, MAX_PAGE)
+        searchKeyword('', '', keyword, MAX_PAGE)
 
 
-    driver.quit()
+    #driver.quit()
 
 if __name__ == "__main__":
    main(sys.argv[1:])
