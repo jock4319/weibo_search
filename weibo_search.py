@@ -340,7 +340,7 @@ def personCrawler(driver, person, keyword):
                 print("waiting for page load...")
                 try:
                     wait = WebDriverWait(driver, 10)
-                    wait.until(EC.presence_of_element_located((By.XPATH, '//div[@class="W_pages"]')))
+                    wait.until(EC.presence_of_element_located((By.XPATH, '//div[@class="W_pages"] | //div[@class="WB_empty"]')))
                     break
                 except:
                     #print("Maybe no next page...")
@@ -348,8 +348,8 @@ def personCrawler(driver, person, keyword):
                 driver.execute_script("window.scrollTo(0, document.body.scrollHeight);")
             time.sleep(5)
 
-            htmlBody = driver.page_source
-            #htmlBody = driver.find_element_by_tag_name('html').get_attribute('innerHTML')
+            #htmlBody = driver.page_source
+            htmlBody = driver.find_element_by_tag_name('body').get_attribute('innerHTML')
             html = etree.HTML(htmlBody, base_url=driver.current_url)
             if page == 0 and idx == 0:
                 try:
@@ -369,6 +369,8 @@ def personCrawler(driver, person, keyword):
                     fans = html.xpath('//table[@class="tb_counter"]//span[text()="粉丝"]')[0].xpath('../strong')[0].text
                     print(fans + "粉丝")
                     fans = int(fans)
+                    if fans < 10000:
+                        return fans, description, avgForward, avgComment, resForward, resComment, lastPostTime, postType, resArticleRead, ratioContent
                 except Exception as ex:
                     fans = 0
                     print(ex)
@@ -445,7 +447,7 @@ def personCrawler(driver, person, keyword):
                         if len(mediaBox.xpath('./div[@action-type="widget_articleLayer"]')) > 0:
                             cardType = 3    # 'article'
                             #mediaBox.find_element_by_xpath('./div[@action-type="widget_articleLayer"]/div[1]/div').click()
-                            tree = etree.ElementTree(driver)
+                            tree = html.getroottree()
                             print(tree.getpath(mediaBox.xpath('./div[@action-type="widget_articleLayer"]')[0]))
                             driver.find_element_by_xpath(tree.getpath(mediaBox.xpath('./div[@action-type="widget_articleLayer"]')[0])).click()
 
@@ -463,6 +465,7 @@ def personCrawler(driver, person, keyword):
                                 read = re.sub("[^0123456789\.]", '', read)
                                 listArticleRead.append(int(read))
                                 print('read: %s' % read)
+                            time.sleep(1)
                             driver.find_element_by_xpath('//div[@node-type="sidebar"]/a[1]').click()
                             driver.switch_to_default_content()
                     except Exception as ex:
@@ -574,30 +577,20 @@ def openUrlWithRetry(driver, url, retry):
     return countRetry
 
 def searchFile(filename, MAX_PAGE):
-    try:
-        f = open(filename, 'r', newline='', encoding='utf-8')
+    with open(filename, 'r', newline='', encoding='utf-8') as f:
         reader = csv.reader(f)
-    except:
-        print("ERROR: file (%s) can't be opened, pleace check again", filename)
-        return
-
-    searchResult = []
-    for item in reader:
-        product_seg = item[0].replace('\ufeff', '')
-        circle = item[1]
-        keyword = item[2]
-        print(repr("%s-%s-%s" % (product_seg, circle, keyword)))
-        searchKeyword(product_seg, circle, keyword, MAX_PAGE)
+        try:
+            searchResult = []
+            for item in reader:
+                product_seg = item[0].replace('\ufeff', '')
+                circle = item[1]
+                keyword = item[2]
+                print(repr("%s-%s-%s" % (product_seg, circle, keyword)))
+                searchKeyword(product_seg, circle, keyword, MAX_PAGE)
+        except csv.Error as e:
+            sys.exit('file {}, line {}: {}'.format(filename, reader.line_num, e))
 
 def searchKeyword(product_seg, circle, keyword, MAX_PAGE):
-    outfile = product_seg + "_" + circle + "_" + keyword + "_" + str(datetime.date.today()) + '.csv'
-    isExist = os.path.exists(outfile)
-    fout = open(outfile, 'a', newline='', encoding='utf-8')
-    writer = csv.writer(fout)
-    if not isExist:
-        fout.write('\ufeff')
-        writer.writerow(["產品", "圈", "關鍵字", "微博名", "粉絲數", "全部轉發量（全range,均數）", "全部評論數（全range,均數）", "全部最後更新時間", "原創轉發量（全range,均數）",\
-         "原創評論數（全range,均數）", "原創最後更新時間", "圖-影-文-其他", "微博上的自我介紹", "鏈結", "官方", "原創文章閱讀量（全range,均數)", "貼文相關性"])
     driver = createBrowserFirefox()
     personList = searchUserCrawler(driver, keyword, MAX_PAGE)
     personList2 = searchCrawler(driver, keyword, MAX_PAGE)
@@ -611,57 +604,66 @@ def searchKeyword(product_seg, circle, keyword, MAX_PAGE):
     # merge lists
     personList = personList + personList2
 
-    driver = createBrowserFirefox()
-    for person in personList:
-        thePerson = person[:]
-        fans, description, avgForward, avgComment, resForward, resComment, lastPostTime, postType, resArticleRead, ratioContent = personCrawler(driver, thePerson, keyword)
-        if fans < 10000:
-            continue
-        thePerson.insert(0, product_seg)
-        thePerson.insert(1, circle)
-        thePerson.insert(2, keyword)
-        thePerson.insert(4, str(fans))
-        thePerson.insert(5, ("%s, %d" % (resForward[0], avgForward[0])))
-        thePerson.insert(6, ("%s, %d" % (resComment[0], avgComment[0])))
-        thePerson.insert(7, ("%s" % (lastPostTime[0] if lastPostTime[0] != DEFAULT_DATE else "-")))
-        thePerson.insert(8, ("%s, %d" % (resForward[1], avgForward[1])))
-        thePerson.insert(9, ("%s, %d" % (resComment[1], avgComment[1])))
-        thePerson.insert(10, ("%s" % (lastPostTime[1] if lastPostTime[1] != DEFAULT_DATE else "-")))
-        thePerson.insert(11, ("%d-%d-%d-%d" % (postType[1], postType[2], postType[3], postType[0])))
-        thePerson.insert(12, description)
-        thePerson.append("V" if "官方" in thePerson[12] else "")
-        thePerson.append(resArticleRead)
-        thePerson.append(ratioContent)
+    outfile = product_seg + "_" + circle + "_" + keyword + "_" + str(datetime.date.today()) + '.csv'
+    isExist = os.path.exists(outfile)
+    with open(outfile, 'a', newline='', encoding='utf-8') as fout:
+        writer = csv.writer(fout)
+        if not isExist:
+            fout.write('\ufeff')
+            writer.writerow(["產品", "圈", "關鍵字", "微博名", "粉絲數", "全部轉發量（全range,均數）", "全部評論數（全range,均數）", "全部最後更新時間", "原創轉發量（全range,均數）",\
+             "原創評論數（全range,均數）", "原創最後更新時間", "圖-影-文-其他", "微博上的自我介紹", "鏈結", "官方", "原創文章閱讀量（全range,均數)", "貼文相關性"])
 
-        sql = "SELECT * FROM Weibo WHERE product_seg='%s' AND circle='%s' AND influencer='%s' AND link='%s'" % (thePerson[0], thePerson[1], thePerson[3], thePerson[13])
-        print(sql)
-        count = countMysqlDB(sql)
-        if count > 0:
-            print("Already in database: %d" % count)
-        else:
+        for person in personList:
+            thePerson = person[:]
+
+            sql = "SELECT * FROM Weibo WHERE product_seg='%s' AND circle='%s' AND influencer='%s' AND link='%s'" % (product_seg, circle, thePerson[0], thePerson[1])
+            print(sql)
+            count = countMysqlDB(sql)
+            if count > 0:
+                print("Already in database: %d" % count)
+                continue
+
+            driver = createBrowserFirefox()
+            fans, description, avgForward, avgComment, resForward, resComment, lastPostTime, postType, resArticleRead, ratioContent = personCrawler(driver, thePerson, keyword)
+            driver.quit()
+
+            if fans < 10000:
+                continue
+            thePerson.insert(0, product_seg)
+            thePerson.insert(1, circle)
+            thePerson.insert(2, keyword)
+            thePerson.insert(4, str(fans))
+            thePerson.insert(5, ("%s, %d" % (resForward[0], avgForward[0])))
+            thePerson.insert(6, ("%s, %d" % (resComment[0], avgComment[0])))
+            thePerson.insert(7, ("%s" % (lastPostTime[0] if lastPostTime[0] != DEFAULT_DATE else "-")))
+            thePerson.insert(8, ("%s, %d" % (resForward[1], avgForward[1])))
+            thePerson.insert(9, ("%s, %d" % (resComment[1], avgComment[1])))
+            thePerson.insert(10, ("%s" % (lastPostTime[1] if lastPostTime[1] != DEFAULT_DATE else "-")))
+            thePerson.insert(11, ("%d-%d-%d-%d" % (postType[1], postType[2], postType[3], postType[0])))
+            thePerson.insert(12, description)
+            thePerson.append("V" if "官方" in thePerson[12] else "")
+            thePerson.append(resArticleRead)
+            thePerson.append(ratioContent)
             writer.writerow(thePerson)
 
-        field2Insert = ''
-        value2Insert = ''
-        if not (resForward[0] == '' and resComment[0] == '' and resForward[1] == '' and resComment[1] == ''):
-            field2Insert += "share_avg, comment_avg, share_range, comment_range, ori_share_avg, ori_comment_avg, ori_share_range, ori_comment_range, "
-            value2Insert += str(avgForward[0]) + "', '" + str(avgComment[0]) + "', '" + resForward[0] + "', '" + resComment[0] + "', '" \
-                + str(avgForward[1]) + "', '" + str(avgComment[1]) + "', '" + resForward[1] + "', '" + resComment[1] + "', '"
-        if lastPostTime[0] != DEFAULT_DATE:
-            field2Insert += "lastPostTime, "
-            value2Insert += str(lastPostTime[0]) + "', '"
-        if lastPostTime[1] != DEFAULT_DATE:
-            field2Insert += "ori_lastPostTime, "
-            value2Insert += str(lastPostTime[1]) + "', '"
-        sql = "INSERT INTO Weibo (product_seg, circle, keyword, influencer, follower, " + field2Insert + "post_type, description, link, article_read, ratio_content)" \
-            + "VALUES ('" + thePerson[0] + "', '" + thePerson[1] + "', '" + thePerson[2] + "', '" + thePerson[3] + "', '" + str(fans) + "', '" \
-            + value2Insert + thePerson[11] + "', '" + thePerson[12] + "', '" + thePerson[13] + "', '" + resArticleRead + "', '" + ratioContent + "')"
-        print(sql)
-        updateMysqlDB(sql)
-        fout.flush()
-    driver.quit()
-
-    fout.close()
+            field2Insert = ''
+            value2Insert = ''
+            if not (resForward[0] == '' and resComment[0] == '' and resForward[1] == '' and resComment[1] == ''):
+                field2Insert += "share_avg, comment_avg, share_range, comment_range, ori_share_avg, ori_comment_avg, ori_share_range, ori_comment_range, "
+                value2Insert += str(avgForward[0]) + "', '" + str(avgComment[0]) + "', '" + resForward[0] + "', '" + resComment[0] + "', '" \
+                    + str(avgForward[1]) + "', '" + str(avgComment[1]) + "', '" + resForward[1] + "', '" + resComment[1] + "', '"
+            if lastPostTime[0] != DEFAULT_DATE:
+                field2Insert += "lastPostTime, "
+                value2Insert += str(lastPostTime[0]) + "', '"
+            if lastPostTime[1] != DEFAULT_DATE:
+                field2Insert += "ori_lastPostTime, "
+                value2Insert += str(lastPostTime[1]) + "', '"
+            sql = "INSERT INTO Weibo (product_seg, circle, keyword, influencer, follower, " + field2Insert + "post_type, description, link, article_read, ratio_content)" \
+                + "VALUES ('" + thePerson[0] + "', '" + thePerson[1] + "', '" + thePerson[2] + "', '" + thePerson[3] + "', '" + str(fans) + "', '" \
+                + value2Insert + thePerson[11] + "', '" + thePerson[12] + "', '" + thePerson[13] + "', '" + resArticleRead + "', '" + ratioContent + "')"
+            print(sql)
+            updateMysqlDB(sql)
+            fout.flush()
 
 def main(argv):
     MAX_PAGE = 11
