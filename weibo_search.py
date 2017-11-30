@@ -54,38 +54,50 @@ def createBrowserFirefox():
     driver.set_page_load_timeout(60)
     return driver
 
-def searchUserCrawler(driver, keyword, MAX_PAGE):
+def searchUserCrawler(keyword, MAX_PAGE):
     listSearch = ["http://s.weibo.com/user/&tag=", "http://s.weibo.com/user/"]
     print('Keyword is %s, %d page(s)' % (keyword, MAX_PAGE))
     _page = 1
     #next_page = "http://s.weibo.com/user/" + quote(quote(keyword)) + "&Refer=weibo_user"
     #next_page = "http://s.weibo.com/user/" + keyword + "&Refer=weibo_user"
 
+    driver = createBrowserFirefox()
     searchResult = []
+    html = ''
     for search in listSearch:
         next_page = search + quote(quote(keyword))
 
         #while next_page:
         for _page in range(MAX_PAGE):
-            if openUrlWithRetry(driver, next_page, 5) <= 0:
-                break
-            #time.sleep(randint(5,15))
-            element = WebDriverWait(driver, 30).until(EC.presence_of_element_located((By.XPATH, '//div[@class="pl_personlist"] | //div[@class="pl_noresult"]')))
-            #driver.execute_script("window.scrollTo(500, document.body.scrollHeight-500);")
-            driver.execute_script("window.scrollTo(500, 1000);")
+            for i in range(3):
+                if openUrlWithRetry(driver, next_page, 5) <= 0:
+                    break
+                try:
+                    #time.sleep(randint(5,15))
+                    element = WebDriverWait(driver, 30).until(EC.presence_of_element_located((By.XPATH, '//div[@class="pl_personlist"] | //div[@class="pl_noresult"]')))
+                    #driver.execute_script("window.scrollTo(500, document.body.scrollHeight-500);")
+                    driver.execute_script("window.scrollTo(500, 1000);")
 
-            htmlBody = driver.page_source
-            html = etree.HTML(htmlBody, base_url=driver.current_url)
+                    htmlBody = driver.page_source
+                    html = etree.HTML(htmlBody, base_url=driver.current_url)
+                    break
+                except:
+                    driver.quit()
+                    time.sleep(3)
+                    driver = createBrowserFirefox()
+            if html == '':
+                print("Can't get html...")
+                continue
 
             try:
                 #personList = driver.find_elements_by_xpath('//div[@id="pl_user_feedList"]//div[@class="list_person clearfix"]')
                 personList = html.xpath('//div[@id="pl_user_feedList"]//div[@class="list_person clearfix"]')
                 if len(personList) == 0:
                     print("search no result")
-                    return searchResult
+                    break
             except NoSuchElementException:
                 print("NoSuchElementException")
-                return searchResult
+                break
             for person in personList:
                 personInfo = []
                 try:
@@ -136,26 +148,37 @@ def searchUserCrawler(driver, keyword, MAX_PAGE):
             else:
                 print ("No next page")
                 break
-
+    driver.quit()
     return searchResult
 
-def searchCrawler(driver, keyword, MAX_PAGE):
+def searchCrawler(keyword, MAX_PAGE):
     print('Keyword is %s, %d page(s)' % (keyword, MAX_PAGE))
     _page = 1
     next_page = "http://s.weibo.com/weibo/" + quote(quote(keyword))
 
+    driver = createBrowserFirefox()
     searchResult = []
+    html = ''
     for _page in range(MAX_PAGE):
-        if openUrlWithRetry(driver, next_page, 3) <= 0:
-            break
-        #time.sleep(randint(5,15))
-        element = WebDriverWait(driver, 30).until(EC.presence_of_element_located((By.XPATH, '//div[@node-type="feed_list"]')))
-        #driver.execute_script("window.scrollTo(500, document.body.scrollHeight-500);")
-        driver.execute_script("window.scrollTo(500, 1000);")
+        for i in range(3):
+            if openUrlWithRetry(driver, next_page, 3) <= 0:
+                break
+            try:
+                #time.sleep(randint(5,15))
+                element = WebDriverWait(driver, 30).until(EC.presence_of_element_located((By.XPATH, '//div[@node-type="feed_list"]')))
+                #driver.execute_script("window.scrollTo(500, document.body.scrollHeight-500);")
+                driver.execute_script("window.scrollTo(500, 1000);")
 
-        htmlBody = driver.page_source
-        html = etree.HTML(htmlBody, base_url=driver.current_url)
-
+                htmlBody = driver.page_source
+                html = etree.HTML(htmlBody, base_url=driver.current_url)
+                break
+            except:
+                driver.quit()
+                time.sleep(3)
+                driver = createBrowserFirefox()
+        if html == '':
+            print("Can't get html...")
+            continue
         # star list
         try:
             #personList = driver.find_elements_by_xpath('//div[@class="list_star clearfix"]/div[@class="star_detail"]/p[@class="star_name"]/a[@class="name_txt"]')
@@ -211,6 +234,7 @@ def searchCrawler(driver, keyword, MAX_PAGE):
         else:
             print ("No next page")
             break
+    driver.quit()
     return searchResult
 
 def createMysqlDB():
@@ -269,6 +293,7 @@ def personCrawler(person, keyword):
     ratioContent = ''
 
     driver = createBrowserFirefox()
+    html = ''
 
     for page in range(PAGE):
 
@@ -290,9 +315,22 @@ def personCrawler(person, keyword):
                         break
                     except:
                         pass
-                    driver.execute_script("window.scrollTo(0, document.body.scrollHeight);")
+                    try:
+                        driver.execute_script("window.scrollTo(0, document.body.scrollHeight);")
+                    except:
+                        break
                 if pageLoaded == 1:
-                    break
+                    try:
+                        time.sleep(5)
+                        #htmlBody = driver.page_source
+                        htmlBody = driver.find_element_by_tag_name('body').get_attribute('innerHTML')
+                        html = etree.HTML(htmlBody, base_url=driver.current_url)
+                        break
+                    except:
+                        print("Closing browser and try again...")
+                        driver.quit()
+                        time.sleep(3)
+                        driver = createBrowserFirefox()
                 else:
                     print("Closing browser and try again...")
                     driver.quit()
@@ -302,11 +340,6 @@ def personCrawler(person, keyword):
                 driver.quit()
                 return fans, description, avgForward, avgComment, resForward, resComment, lastPostTime, postType, resArticleRead, ratioContent
 
-            time.sleep(5)
-
-            #htmlBody = driver.page_source
-            htmlBody = driver.find_element_by_tag_name('body').get_attribute('innerHTML')
-            html = etree.HTML(htmlBody, base_url=driver.current_url)
             if page == 0 and idx == 0:
                 try:
                     #title = driver.find_element_by_xpath('//div[@class="pf_username"]/h1').text
@@ -533,10 +566,8 @@ def searchFile(filename, MAX_PAGE):
             sys.exit('file {}, line {}: {}'.format(filename, reader.line_num, e))
 
 def searchKeyword(product_seg, circle, keyword, MAX_PAGE):
-    driver = createBrowserFirefox()
-    personList = searchUserCrawler(driver, keyword, MAX_PAGE)
-    personList2 = searchCrawler(driver, keyword, MAX_PAGE)
-    driver.quit()
+    personList = searchUserCrawler(keyword, MAX_PAGE)
+    personList2 = searchCrawler(keyword, MAX_PAGE)
     # remove duplicate person
     for p2 in personList2:
         for p1 in personList:
