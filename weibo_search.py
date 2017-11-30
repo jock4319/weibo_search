@@ -65,9 +65,10 @@ def searchUserCrawler(driver, keyword, MAX_PAGE):
     for search in listSearch:
         next_page = search + quote(quote(keyword))
 
-        if openUrlWithRetry(driver, next_page, 5) <= 0:
-            return searchResult
-        while next_page:
+        #while next_page:
+        for _page in range(MAX_PAGE):
+            if openUrlWithRetry(driver, next_page, 5) <= 0:
+                break
             #time.sleep(randint(5,15))
             element = WebDriverWait(driver, 30).until(EC.presence_of_element_located((By.XPATH, '//div[@class="pl_personlist"] | //div[@class="pl_noresult"]')))
             #driver.execute_script("window.scrollTo(500, document.body.scrollHeight-500);")
@@ -128,25 +129,14 @@ def searchUserCrawler(driver, keyword, MAX_PAGE):
                         searchResult.append(personInfo)
                 print("---- %d ----" % len(searchResult))
 
-            if _page < MAX_PAGE:
-                try:
-                    #next_page = driver.find_element(By.XPATH, '//a[text()="下一页"]').get_attribute('href')
-                    nextPage = html.xpath('//a[text()="下一页"]/@href')
-                    if len(nextPage) > 0:
-                        next_page = urljoin(driver.current_url, nextPage[0])
-                        driver.execute_script("window.scrollTo(0, document.body.scrollHeight);")
-                        #next_page.click()
-                        print(next_page)
-                        if openUrlWithRetry(driver, next_page, 3) <= 0:
-                            break
-                    else:
-                        break
-                except NoSuchElementException:
-                    print ("No more next page")
-                    break
+            nextPage = html.xpath('//a[text()="下一页"]/@href')
+            if len(nextPage) > 0:
+                next_page = urljoin(driver.current_url, nextPage[0])
+                print(next_page)
             else:
+                print ("No next page")
                 break
-            _page += 1
+
     return searchResult
 
 def searchCrawler(driver, keyword, MAX_PAGE):
@@ -155,9 +145,9 @@ def searchCrawler(driver, keyword, MAX_PAGE):
     next_page = "http://s.weibo.com/weibo/" + quote(quote(keyword))
 
     searchResult = []
-    if openUrlWithRetry(driver, next_page, 3) <= 0:
-        return searchResult
-    while next_page:
+    for _page in range(MAX_PAGE):
+        if openUrlWithRetry(driver, next_page, 3) <= 0:
+            break
         #time.sleep(randint(5,15))
         element = WebDriverWait(driver, 30).until(EC.presence_of_element_located((By.XPATH, '//div[@node-type="feed_list"]')))
         #driver.execute_script("window.scrollTo(500, document.body.scrollHeight-500);")
@@ -214,25 +204,13 @@ def searchCrawler(driver, keyword, MAX_PAGE):
             #writer.writerow(searchResult)
             print("---- %d ----" % len(searchResult))
 
-
-        if _page < MAX_PAGE:
-            try:
-                #next_page = driver.find_element(By.XPATH, '//a[text()="下一页"]').get_attribute('href')
-                nextPage = html.xpath('//a[text()="下一页"]/@href')
-                if len(nextPage) > 0:
-                    next_page = urljoin(driver.current_url, nextPage[0])
-                    driver.execute_script("window.scrollTo(0, document.body.scrollHeight);")
-                    print(next_page)
-                    if openUrlWithRetry(driver, next_page, 3) <= 0:
-                        break
-                else:
-                    break
-            except NoSuchElementException:
-                print ("No more next page")
-                break
+        nextPage = html.xpath('//a[text()="下一页"]/@href')
+        if len(nextPage) > 0:
+            next_page = urljoin(driver.current_url, nextPage[0])
+            print(next_page)
         else:
+            print ("No next page")
             break
-        _page += 1
     return searchResult
 
 def createMysqlDB():
@@ -267,12 +245,10 @@ def updateMysqlDB(sql):
         mysqlDB.rollback()
     mysqlDB.close()
 
-def personCrawler(driver, person, keyword):
+def personCrawler(person, keyword):
     PAGE = 2
     title = person[0]
     url = person[1]
-    #listAction = ['//a[text()="文章"]', '//a[text()="全部"]', '//a[text()="原创"]']
-    #listAction = ['//a[text()="全部"]', '//a[text()="原创"]']
     listQuery = ['?profile_ftype=1&is_all=1#_0', '?profile_ftype=1&is_ori=1#_0', \
         '?is_search=0&visible=0&is_all=1&is_tag=0&profile_ftype=1&page=2#feedtop', \
         '?is_search=0&visible=0&is_ori=1&is_tag=0&profile_ftype=1&page=2#feedtop']
@@ -292,60 +268,40 @@ def personCrawler(driver, person, keyword):
     countContent = 0
     ratioContent = ''
 
-    # if openUrlWithRetry(driver, url, 5) > 0:
-    #     print(url)
-    # else:
-    #     return fans, description, avgForward, avgComment, resForward, resComment, lastPostTime, postType, resArticleRead, ratioContent
+    driver = createBrowserFirefox()
 
     for page in range(PAGE):
 
-        #time.sleep(randint(5,15))
-
-        #for idx in range(len(listAction)):
         for idx in range(PAGE):
 
-            # try:
-            #     ele = driver.find_element(By.XPATH, listAction[idx])
-            #     if not ele.is_displayed():
-            #         try:
-            #             # driver.execute_script("document.getElementsByClassName('layer_menu_list')[0].style.display='inline-block';")
-            #             driver.find_element_by_xpath('//li[@node-type="tab_other"]/a[1]').click()
-            #             ele = WebDriverWait(driver, 60).until(EC.visibility_of_element_located((By.XPATH, listAction[idx])))
-            #
-            #             # driver.find_element_by_xpath('//div[@class="layer_menu_list"]/li[@action-data="profile_ftype=1&is_ori=1"]/a').click()
-            #         except Exception as ex:
-            #             print("Failed to show element")
-            #             print(ex)
-            #     ele.click()
-            #
-            # except Exception as ex:
-            #     print("Failed to click... %s" % listAction[idx])
-            #     print(ex)
-            #     continue
-
-            if openUrlWithRetry(driver, url + listQuery[page*2+idx], 5) > 0:
-                print(url)
-                time.sleep(randint(5,8))
-            else:
+            pageLoaded = 0
+            for j in range(3):
+                if openUrlWithRetry(driver, url + listQuery[page*2+idx], 5) > 0:
+                    print(url)
+                    time.sleep(randint(5,8))
+                else:
+                    break
+                for i in range(20):
+                    print("waiting for page load...")
+                    try:
+                        wait = WebDriverWait(driver, 10)
+                        wait.until(EC.presence_of_element_located((By.XPATH, '//div[@class="W_pages"] | //div[@class="WB_empty"]')))
+                        pageLoaded = 1
+                        break
+                    except:
+                        pass
+                    driver.execute_script("window.scrollTo(0, document.body.scrollHeight);")
+                if pageLoaded == 1:
+                    break
+                else:
+                    print("Closing browser and try again...")
+                    driver.quit()
+                    time.sleep(3)
+                    driver = createBrowserFirefox()
+            if pageLoaded == 0:
+                driver.quit()
                 return fans, description, avgForward, avgComment, resForward, resComment, lastPostTime, postType, resArticleRead, ratioContent
 
-            # driver.execute_script("window.scrollTo(0, document.body.scrollHeight);")
-            # time.sleep(5)
-            # driver.execute_script("window.scrollTo(0, document.body.scrollHeight);")
-            # time.sleep(5)
-            # driver.execute_script("window.scrollTo(0, document.body.scrollHeight);")
-            # time.sleep(10)
-
-            for i in range(20):
-                print("waiting for page load...")
-                try:
-                    wait = WebDriverWait(driver, 10)
-                    wait.until(EC.presence_of_element_located((By.XPATH, '//div[@class="W_pages"] | //div[@class="WB_empty"]')))
-                    break
-                except:
-                    #print("Maybe no next page...")
-                    pass
-                driver.execute_script("window.scrollTo(0, document.body.scrollHeight);")
             time.sleep(5)
 
             #htmlBody = driver.page_source
@@ -370,6 +326,7 @@ def personCrawler(driver, person, keyword):
                     print(fans + "粉丝")
                     fans = int(fans)
                     if fans < 10000:
+                        driver.quit()
                         return fans, description, avgForward, avgComment, resForward, resComment, lastPostTime, postType, resArticleRead, ratioContent
                 except Exception as ex:
                     fans = 0
@@ -379,10 +336,6 @@ def personCrawler(driver, person, keyword):
                 #     print(description)
                 # except Exception as ex:
                 #     print(ex)
-
-            # htmlBody = driver.page_source
-            # html = etree.HTML(htmlBody, base_url=driver.current_url)
-
             try:
                 #cardList = driver.find_elements_by_xpath('//div[@node-type="feed_list"]/div[@action-type="feed_list_item"]')
                 cardList = html.xpath('//div[@node-type="feed_list"]/div[@action-type="feed_list_item"]')
@@ -502,18 +455,6 @@ def personCrawler(driver, person, keyword):
                 except Exception as ex:
                     print(ex)
 
-        # try:
-        #     next_page = driver.find_element(By.XPATH, '//a[text()="下一页"]')
-        #     driver.execute_script("window.scrollTo(0, document.body.scrollHeight);")
-        #     #next_page.click()
-        #     print(next_page.get_attribute('href'))
-        #     if openUrlWithRetry(driver, next_page.get_attribute('href'), 3) <= 0:
-        #         print ("Get next page failed")
-        #         break
-        # except NoSuchElementException:
-        #     print ("No more next page")
-        #     break
-
     print("--- post type: %d-%d-%d-%d" % (postType[1], postType[2], postType[3], postType[0]))
 
     # calculate forward and comment number
@@ -556,6 +497,7 @@ def personCrawler(driver, person, keyword):
     ratioContent = ('=(%d/%d)' % (countContent, len(listContent)))
     print("--- relate to keyword: %s" % ratioContent)
 
+    driver.quit()
     return fans, description, avgForward, avgComment, resForward, resComment, lastPostTime, postType, resArticleRead, ratioContent
 
 def openUrlWithRetry(driver, url, retry):
@@ -623,9 +565,7 @@ def searchKeyword(product_seg, circle, keyword, MAX_PAGE):
                 print("Already in database: %d" % count)
                 continue
 
-            driver = createBrowserFirefox()
-            fans, description, avgForward, avgComment, resForward, resComment, lastPostTime, postType, resArticleRead, ratioContent = personCrawler(driver, thePerson, keyword)
-            driver.quit()
+            fans, description, avgForward, avgComment, resForward, resComment, lastPostTime, postType, resArticleRead, ratioContent = personCrawler(thePerson, keyword)
 
             if fans < 10000:
                 continue
@@ -695,10 +635,8 @@ def main(argv):
     #driver = createBrowserFirefox()
 
     if url != '':
-        driver = createBrowserFirefox()
         person = ['', url]
-        personCrawler(driver, person, keyword)
-        driver.quit()
+        personCrawler(person, keyword)
     elif filename != '':
         searchFile(filename, MAX_PAGE)
     elif keyword != '':
