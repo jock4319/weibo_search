@@ -291,6 +291,7 @@ def personCrawler(person, keyword):
     listContent = []
     countContent = 0
     ratioContent = ''
+    pageNum = ''
 
     driver = createBrowserFirefox()
     html = ''
@@ -338,7 +339,7 @@ def personCrawler(person, keyword):
                     driver = createBrowserFirefox()
             if pageLoaded == 0:
                 driver.quit()
-                return fans, description, avgForward, avgComment, resForward, resComment, lastPostTime, postType, resArticleRead, ratioContent
+                return fans, description, avgForward, avgComment, resForward, resComment, lastPostTime, postType, resArticleRead, ratioContent, pageNum
 
             if page == 0 and idx == 0:
                 try:
@@ -360,9 +361,17 @@ def personCrawler(person, keyword):
                     fans = int(fans)
                     if fans < 10000:
                         driver.quit()
-                        return fans, description, avgForward, avgComment, resForward, resComment, lastPostTime, postType, resArticleRead, ratioContent
+                        return fans, description, avgForward, avgComment, resForward, resComment, lastPostTime, postType, resArticleRead, ratioContent, pageNum
                 except Exception as ex:
                     fans = 0
+                    print(ex)
+                try:
+                    pageNum = html.xpath('//td[@class="current"]/a[@class="tab_link"]/@href')[0]
+                    p2 = pageNum.find("p/") + len("p/")
+                    p3 = pageNum.find("/", p2)
+                    pageNum = pageNum[p2: p3]
+                except Exception as ex:
+                    pageNum = ''
                     print(ex)
                 # try:
                 #     description = driver.find_element_by_xpath('//div[@class="PCD_person_info"]/div/p[@class="info"]').text
@@ -531,7 +540,7 @@ def personCrawler(person, keyword):
     print("--- relate to keyword: %s" % ratioContent)
 
     driver.quit()
-    return fans, description, avgForward, avgComment, resForward, resComment, lastPostTime, postType, resArticleRead, ratioContent
+    return fans, description, avgForward, avgComment, resForward, resComment, lastPostTime, postType, resArticleRead, ratioContent, pageNum
 
 def openUrlWithRetry(driver, url, retry):
     countRetry = retry
@@ -584,7 +593,7 @@ def searchKeyword(product_seg, circle, keyword, MAX_PAGE):
         if not isExist:
             fout.write('\ufeff')
             writer.writerow(["產品", "圈", "關鍵字", "微博名", "粉絲數", "全部轉發量（全range,均數）", "全部評論數（全range,均數）", "全部最後更新時間", "原創轉發量（全range,均數）",\
-             "原創評論數（全range,均數）", "原創最後更新時間", "圖-影-文-其他", "微博上的自我介紹", "鏈結", "官方", "原創文章閱讀量（全range,均數)", "貼文相關性"])
+             "原創評論數（全range,均數）", "原創最後更新時間", "圖-影-文-其他", "微博上的自我介紹", "鏈結", "官方/有限公司", "原創文章閱讀量（全range,均數)", "貼文相關性"])
 
         for person in personList:
             thePerson = person[:]
@@ -596,7 +605,7 @@ def searchKeyword(product_seg, circle, keyword, MAX_PAGE):
                 print("Already in database: %d" % count)
                 continue
 
-            fans, description, avgForward, avgComment, resForward, resComment, lastPostTime, postType, resArticleRead, ratioContent = personCrawler(thePerson, keyword)
+            fans, description, avgForward, avgComment, resForward, resComment, lastPostTime, postType, resArticleRead, ratioContent, pageNum = personCrawler(thePerson, keyword)
 
             if fans < 10000:
                 continue
@@ -612,7 +621,7 @@ def searchKeyword(product_seg, circle, keyword, MAX_PAGE):
             thePerson.insert(10, ("%s" % (lastPostTime[1] if lastPostTime[1] != DEFAULT_DATE else "-")))
             thePerson.insert(11, ("%d-%d-%d-%d" % (postType[1], postType[2], postType[3], postType[0])))
             thePerson.insert(12, description)
-            thePerson.append("V" if "官方" in thePerson[12] else "")
+            thePerson.append("V" if "官方" in thePerson[12] or "有限公司" in thePerson[12] else "")
             thePerson.append(resArticleRead)
             thePerson.append(ratioContent)
             writer.writerow(thePerson)
