@@ -88,7 +88,7 @@ def searchUserCrawler(keyword, MAX_PAGE):
                 #     pass
                 try:
                     #link = person.find_elements_by_xpath('.//a[@class="W_linkb"]')[0].get_attribute('href').split('?')[0]
-                    link = urljoin(driver.current_url, person.xpath('.//a[@class="W_linkb"]/@href')[0].split('?')[0])
+                    link = urljoin(driver.current_url, person.xpath('.//a[@class="W_linkb"]/@href')[0].split('?')[0]).replace('www.', '')
                     print(link)
                     personInfo.append(link)
                 except:
@@ -156,7 +156,7 @@ def searchCrawler(keyword, MAX_PAGE):
             try:
                 title = person.text.strip()
                 #link = person.get_attribute('href').split('?')[0]
-                link = urljoin(driver.current_url, person.attrib['href'].split('?')[0])
+                link = urljoin(driver.current_url, person.attrib['href'].split('?')[0]).replace('www.', '')
                 print(title + ": " + link)
                 personInfo.append(title)
                 personInfo.append(link)
@@ -180,7 +180,7 @@ def searchCrawler(keyword, MAX_PAGE):
             try:
                 title = person.text.strip()
                 #link = person.get_attribute('href').split('?')[0]
-                link = urljoin(driver.current_url, person.attrib['href'].split('?')[0])
+                link = urljoin(driver.current_url, person.attrib['href'].split('?')[0]).replace('www.', '')
                 print(title + ": " + link)
                 personInfo.append(title)
                 personInfo.append(link)
@@ -236,7 +236,7 @@ def searchFollowerCrawler(page_id, MAX_PAGE):
             if fans >= MIN_FANS:
                 ele = person.xpath('.//div[contains(@class, "info_name")]/a[1]')[0]
                 title = ele.text.strip()
-                link = urljoin(driver.current_url, ele.attrib['href'].split('?')[0])
+                link = urljoin(driver.current_url, ele.attrib['href'].split('?')[0]).replace('www.', '')
                 print(title + ": " + link)
                 searchResult.append([title, link])
 
@@ -257,7 +257,7 @@ def queryKeywordMysqlDB():
     sql = 'SELECT id, keyword FROM Weibo_keyword WHERE finished != 1 LIMIT 1'
     return queryOneMysqlDB(sql)
 
-def CheckListMysqlDB(keyword_id, influencer, link):
+def checkListMysqlDB(keyword_id, influencer, link):
     sql = 'SELECT circle FROM Weibo_keyword WHERE id="{}"'.format(keyword_id)
     circle = queryOneMysqlDB(sql)[0]
     #sql = 'SELECT keyword_id, influencer, link FROM Weibo WHERE keyword_id="{}" AND influencer="{}" AND link="{}"'.format(keyword_id, influencer, link)
@@ -293,7 +293,7 @@ def main(argv):
             print('-------- {}.{} --------'.format(pageId[0], pageId[1]))
             personList = searchFollowerCrawler(pageId[1], 5)    # only 5 pages available
             for person in personList:
-                if CheckListMysqlDB(pageId[0], person[0], person[1]) == None:
+                if checkListMysqlDB(pageId[0], person[0], person[1]) == None:
                     appendMysqlDB(pageId[0], person[0], person[1])
 
             delPageidMysqlDB(pageId[0], pageId[1])
@@ -306,14 +306,14 @@ def main(argv):
         print('-------- {}.{} --------'.format(keyword[0], keyword[1]))
         personList = searchUserCrawler(keyword[1], MAX_PAGE)
         for person in personList:
-            if CheckListMysqlDB(keyword[0], person[0], person[1]) == None:
+            if checkListMysqlDB(keyword[0], person[0], person[1]) == None:
                 appendMysqlDB(keyword[0], person[0], person[1])
 
         time.sleep(randint(5,10))
 
         personList = searchCrawler(keyword[1], MAX_PAGE)
         for person in personList:
-            if CheckListMysqlDB(keyword[0], person[0], person[1]) == None:
+            if checkListMysqlDB(keyword[0], person[0], person[1]) == None:
                 appendMysqlDB(keyword[0], person[0], person[1])
 
         markAsFinishedMysqlDB(keyword[0], keyword[1])

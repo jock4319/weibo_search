@@ -13,6 +13,9 @@ from urllib.parse import quote, urljoin
 import re
 from random import randint
 from lxml import etree
+from multiprocessing import Queue, Process
+import multiprocessing
+import logging
 from weibo_common import createBrowserFirefox, openUrlWithRetry, updateMysqlDB, queryOneMysqlDB, queryAllMysqlDB
 
 config = configparser.ConfigParser()
@@ -25,7 +28,7 @@ def personCrawler(keywordId, url, keywordList):
     listQuery = ['?profile_ftype=1&is_all=1#_0', '?profile_ftype=1&is_ori=1#_0', \
         '?is_search=0&visible=0&is_all=1&is_tag=0&profile_ftype=1&page=2#feedtop', \
         '?is_search=0&visible=0&is_ori=1&is_tag=0&profile_ftype=1&page=2#feedtop']
-    fans = 0
+    fans = -1
     description = ''
     avgForward = [0, 0, 0] # all, original, original with Keyword
     avgComment = [0, 0, 0]
@@ -50,7 +53,7 @@ def personCrawler(keywordId, url, keywordList):
 
         for idx in range(PAGE):
 
-            pageLoaded = 0
+            pageLoaded = False
             for j in range(3):
                 if openUrlWithRetry(driver, url + listQuery[page*2+idx], 5) > 0:
                     print(url)
@@ -62,7 +65,7 @@ def personCrawler(keywordId, url, keywordList):
                     try:
                         wait = WebDriverWait(driver, 10)
                         wait.until(EC.presence_of_element_located((By.XPATH, '//div[@class="W_pages"] | //div[@class="WB_empty"] | //div[contains(@class, "WB_cardwrap")]')))
-                        pageLoaded = 1
+                        pageLoaded = True
                         break
                     except:
                         pass
@@ -70,7 +73,7 @@ def personCrawler(keywordId, url, keywordList):
                         driver.execute_script("window.scrollTo(0, document.body.scrollHeight);")
                     except:
                         break
-                if pageLoaded == 1:
+                if pageLoaded:
                     try:
                         time.sleep(5)
                         #htmlBody = driver.page_source
@@ -87,7 +90,7 @@ def personCrawler(keywordId, url, keywordList):
                     driver.quit()
                     time.sleep(3)
                     driver = createBrowserFirefox()
-            if pageLoaded == 0:
+            if not pageLoaded:
                 driver.quit()
                 return fans, description, avgForward, avgComment, resForward, resComment, lastPostTime, postType, resArticleRead, countContent, pageId
 
@@ -136,6 +139,7 @@ def personCrawler(keywordId, url, keywordList):
                 print("NoSuchElementException")
 
             for card in cardList:
+                foundKeyword = False
                 # check if this is liked post
                 try:
                     #print("xxxxx %d" % len(card.xpath('./div/h4[@class="obj_name S_txt2"]')))
@@ -217,58 +221,67 @@ def personCrawler(keywordId, url, keywordList):
                             driver.find_element_by_xpath('//div[@node-type="sidebar"]/a[1]').click()
                             driver.switch_to_default_content()
                     except Exception as ex:
-                        print(ex)
+                        #print(ex)
+                        pass
                     postType[cardType] += 1
                     print('type: %d' % cardType)
 
                 # get forward number
                 try:
                     #forwardNum = card.find_element_by_xpath('.//span[@node-type="forward_btn_text"]//em[2]').text
-                    forwardNum = card.xpath('.//span[@node-type="forward_btn_text"]//em[2]')[0].text
-                    print(forwardNum)
-                    forward[idx].append(int(forwardNum))
+                    forwardNum = int(card.xpath('.//span[@node-type="forward_btn_text"]//em[2]')[0].text)
                 except:
-                    forward[idx].append(0)
+                    forwardNum = 0
+                forward[idx].append(forwardNum)
                 # get comment number
                 try:
                     #commentNum = card.find_element_by_xpath('.//span[@node-type="comment_btn_text"]//em[2]').text
-                    commentNum = card.xpath('.//span[@node-type="comment_btn_text"]//em[2]')[0].text
-                    print(commentNum)
-                    comment[idx].append(int(commentNum))
+                    commentNum = int(card.xpath('.//span[@node-type="comment_btn_text"]//em[2]')[0].text)
                 except:
-                    comment[idx].append(0)
+                    commentNum = 0
+                comment[idx].append(commentNum)
 
                 if postTime > lastPostTime[idx]:
                     lastPostTime[idx] = postTime
                 else:
                     print("%s > %s" % (lastPostTime[idx], postTime))
 
-            # gather all text content
-            if idx == 1:
-                try:
-                    #listContent += (driver.find_elements_by_xpath('//div[@node-type="feed_list_content"]'))
-                    listContent += (html.xpath('//div[@node-type="feed_list_content"]'))
-                except Exception as ex:
-                    print(ex)
+                # gather all text content
+                if idx == 1:
+                    try:
+                        #listContent += (driver.find_elements_by_xpath('//div[@node-type="feed_list_content"]'))
+                        #listContent += (html.xpath('//div[@node-type="feed_list_content"]'))
+                        contentText = card.xpath('.//div[@node-type="feed_list_content"]')[0]
+                        contentText = "".join(contentText.itertext()).lower()
+                        for keyword in keywordList:
+                            if keyword[0].lower() in contentText:
+                                countContent += 1
+                                print(contentText)
+                                forward[2].append(forwardNum)
+                                comment[2].append(commentNum)
+                                break
+                    except Exception as ex:
+                        print(ex)
 
+            if idx == 1:
                 listMention += html.xpath('//a[contains(@usercard,"name=")]')
                 listMention += html.xpath('//a[@node-type="feed_list_originNick"]')
 
     print("--- post type: %d-%d-%d-%d" % (postType[1], postType[2], postType[3], postType[0]))
 
-    print("{}-{}-{}".format(len(forward[1]), len(comment[1]), len(listContent)))
-    for idx in range(len(listContent)):
-        contentText = "".join(listContent[idx].itertext()).lower()
-        foundKeyword = False
-        for keyword in keywordList:
-            if keyword[0].lower() in contentText:
-                countContent += 1
-                print(listContent[idx].text.strip())
-                foundKeyword = True
-                break
-        if foundKeyword:
-            forward[2].append(forward[1][idx])
-            comment[2].append(comment[1][idx])
+    # print("{}-{}-{}".format(len(forward[1]), len(comment[1]), len(listContent)))
+    # for idx in range(len(listContent)):
+    #     contentText = "".join(listContent[idx].itertext()).lower()
+    #     foundKeyword = False
+    #     for keyword in keywordList:
+    #         if keyword[0].lower() in contentText:
+    #             countContent += 1
+    #             print(listContent[idx].text.strip())
+    #             foundKeyword = True
+    #             break
+    #     if foundKeyword:
+    #         forward[2].append(forward[1][idx])
+    #         comment[2].append(comment[1][idx])
 
     # calculate forward and comment number
     for idx in range(len(forward)):
@@ -302,23 +315,53 @@ def personCrawler(keywordId, url, keywordList):
         resArticleRead = ("-")
     print("--- article read: %s" % resArticleRead)
 
-    ratioContent = ('=(%d/%d)' % (countContent, len(listContent)))
-    print("--- relate to keyword: %s" % ratioContent)
+    # ratioContent = ('=(%d/%d)' % (countContent, len(listContent)))
+    # print("--- relate to keyword: %s" % ratioContent)
+    print("--- relate to keyword: %d" % countContent)
 
     mentions = []
     for mention in listMention:
         title = mention.text.strip()[1:]
-        link = urljoin(driver.current_url, mention.attrib['href'].split('?')[0])
+        link = urljoin(driver.current_url, mention.attrib['href'].split('?')[0]).replace('www.', '')
         if [title, link] not in mentions:
             mentions.append([title, link])
             #print(title + ": " + link)
-            if CheckListMysqlDB(keywordId, title, link) == None:
+            if checkListMysqlDB(keywordId, title, link) == None:
                 appendMysqlDB(keywordId, title, link)
 
     driver.quit()
     return fans, description, avgForward, avgComment, resForward, resComment, lastPostTime, postType, resArticleRead, countContent, pageId
 
-def CheckListMysqlDB(keyword_id, influencer, link):
+def account2DB(keywordId, link):
+    keywordList = []
+    try:
+        keywordList = queryKeywordMysqlDB(queryCircleMysqlDB(keywordId)[0])
+    except Exception as ex:
+        print(ex)
+
+    print(keywordList)
+
+    fans, description, avgForward, avgComment, resForward, resComment, lastPostTime, postType, resArticleRead, countContent, pageId = personCrawler(keywordId, link, keywordList)
+    if fans < MIN_FANS and fans != -1:
+        delAccountMysqlDB(link)
+        return
+
+    postType = ("%d-%d-%d-%d" % (postType[1], postType[2], postType[3], postType[0]))
+    offcial = (1 if "官方" in description or "有限公司" in description else 0)
+    sql = 'UPDATE Weibo SET follower="{}", share_avg="{}", comment_avg="{}", share_range="{}", comment_range="{}", lastPostTime="{}", \
+        ori_share_avg="{}", ori_comment_avg="{}", ori_share_range="{}", ori_comment_range="{}", ori_lastPostTime="{}", \
+        key_share_avg="{}", key_comment_avg="{}", key_share_range="{}", key_comment_range="{}", \
+        post_type="{}", description="{}", article_read="{}", key_content="{}", official="{}", update_time="{}" WHERE keyword_id="{}" AND link="{}"'\
+        .format(str(fans), str(avgForward[0]), str(avgComment[0]), resForward[0], resComment[0], (str(lastPostTime[0]) if lastPostTime[0] != DEFAULT_DATE else ''), \
+        str(avgForward[1]), str(avgComment[1]), resForward[1], resComment[1], (str(lastPostTime[1]) if lastPostTime[1] != DEFAULT_DATE else ''), \
+        str(avgForward[2]), str(avgComment[2]), resForward[2], resComment[2], \
+        postType, description, resArticleRead, countContent, offcial, datetime.datetime.utcnow(), keywordId, link)
+    updateMysqlDB(sql)
+
+    if avgForward[1] >= 10 or avgComment[1] >= 10:
+        appendPageidMysqlDB(keywordId, pageId)
+
+def checkListMysqlDB(keyword_id, influencer, link):
     sql = 'SELECT circle FROM Weibo_keyword WHERE id="{}"'.format(keyword_id)
     circle = queryOneMysqlDB(sql)[0]
     #sql = 'SELECT keyword_id, influencer, link FROM Weibo WHERE keyword_id="{}" AND influencer="{}" AND link="{}"'.format(keyword_id, influencer, link)
@@ -332,6 +375,10 @@ def appendMysqlDB(keyword_id, influencer, link):
 def queryAccountMysqlDB():
     sql = 'SELECT keyword_id, link FROM Weibo WHERE share_avg=0 AND comment_avg=0 AND post_type="" AND keyword_id!=0 LIMIT 1'
     return queryOneMysqlDB(sql)
+
+def queryAccountAllMysqlDB(id):
+    sql = 'SELECT keyword_id, link, id FROM Weibo WHERE share_avg=0 AND comment_avg=0 AND post_type="" AND keyword_id!=0 AND id>"{}" ORDER BY id ASC LIMIT 100'.format(id)
+    return queryAllMysqlDB(sql)
 
 def queryCircleMysqlDB(keyword_id):
     sql = 'SELECT circle FROM Weibo_keyword WHERE id="{}"'.format(keyword_id)
@@ -349,38 +396,61 @@ def delAccountMysqlDB(link):
     sql = 'DELETE FROM Weibo WHERE link="{}"'.format(link)
     updateMysqlDB(sql)
 
-def main(argv):
-
+def putAccount2Queue(que):
+    maxId = 0
     while True:
-        account = queryAccountMysqlDB()
-        if account == None:
-            break
+        if que.qsize() < 20:
+            accounts = queryAccountAllMysqlDB(maxId)
+            for account in accounts:
+                print("{}: {} >> {}".format(account[2], account[0], account[1]))
+                que.put(account)
+            if len(accounts) > 0:
+                maxId = accounts[-1][2]
+            print("------ {}".format(maxId))
+        time.sleep(60)
 
-        try:
-            keywordList = queryKeywordMysqlDB(queryCircleMysqlDB(account[0])[0])
-        except:
-            keywordList = [account[2]]
-        print(keywordList)
+def getAccountFromQueue(que):
+    while not que.empty():
+        account = que.get()
+        print("{} :: {}".format(account[0], account[1]))
+        account2DB(account[0], account[1])
 
-        fans, description, avgForward, avgComment, resForward, resComment, lastPostTime, postType, resArticleRead, countContent, pageId = personCrawler(account[0], account[1], keywordList)
-        if fans < MIN_FANS:
-            delAccountMysqlDB(account[1])
-            continue
+def main(argv):
+    processNum = 2
+    try:
+        opts, args = getopt.getopt(argv,"hp:")
+    except getopt.GetoptError:
+        print ('weibo_account.py -p <process_number>')
+        sys.exit(2)
+    for opt, arg in opts:
+        if opt == '-h':
+            print ('weibo_account.py -p <process_number>')
+            sys.exit()
+        elif opt in ('-p', '--process_number'):
+            processNum = int(arg)
 
-        postType = ("%d-%d-%d-%d" % (postType[1], postType[2], postType[3], postType[0]))
-        offcial = (1 if "官方" in description or "有限公司" in description else 0)
-        sql = 'UPDATE Weibo SET follower="{}", share_avg="{}", comment_avg="{}", share_range="{}", comment_range="{}", lastPostTime="{}", \
-            ori_share_avg="{}", ori_comment_avg="{}", ori_share_range="{}", ori_comment_range="{}", ori_lastPostTime="{}", \
-            key_share_avg="{}", key_comment_avg="{}", key_share_range="{}", key_comment_range="{}", \
-            post_type="{}", description="{}", article_read="{}", key_content="{}", official="{}", update_time="{}" WHERE keyword_id="{}" AND link="{}"'\
-            .format(str(fans), str(avgForward[0]), str(avgComment[0]), resForward[0], resComment[0], (str(lastPostTime[0]) if lastPostTime[0] != DEFAULT_DATE else ''), \
-            str(avgForward[1]), str(avgComment[1]), resForward[1], resComment[1], (str(lastPostTime[1]) if lastPostTime[1] != DEFAULT_DATE else ''), \
-            str(avgForward[2]), str(avgComment[2]), resForward[2], resComment[2], \
-            postType, description, resArticleRead, countContent, offcial, datetime.datetime.utcnow(), account[0], account[1])
-        updateMysqlDB(sql)
+    que = Queue()
 
-        if avgForward[1] >= 10 or avgComment[1] >= 10:
-            appendPageidMysqlDB(account[0], pageId)
+    multiprocessing.log_to_stderr()
+    logger = multiprocessing.get_logger()
+    logger.setLevel(logging.INFO)
+
+    boss = Process(target=putAccount2Queue, args=(que,))
+    boss.start()
+    time.sleep(10)
+
+    processes = []
+    for i in range(processNum):
+        proc = Process(target=getAccountFromQueue, args=(que,))
+        proc.start()
+        processes.append(proc)
+
+    que.close()
+    que.join_thread()
+
+    boss.join()
+    for proc in processes:
+        proc.join()
 
 if __name__ == "__main__":
    main(sys.argv[1:])
