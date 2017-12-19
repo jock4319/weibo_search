@@ -321,7 +321,7 @@ def personCrawler(keywordId, url, keywordList):
 
     mentions = []
     for mention in listMention:
-        title = mention.text.strip()[1:]
+        title = mention.text.strip().replace('@', '')
         link = urljoin(driver.current_url, mention.attrib['href'].split('?')[0]).replace('www.', '')
         if [title, link] not in mentions:
             mentions.append([title, link])
