@@ -1,6 +1,12 @@
 # Data files #
 ###################
 *.csv
+*.xlsx
+
+# Program generated files #
+###########################
+*.log
+*.pyc
 
 # Configuration files #
 #######################
