@@ -29,6 +29,7 @@ def personCrawler(keywordId, url, keywordList):
         '?is_search=0&visible=0&is_all=1&is_tag=0&profile_ftype=1&page=2#feedtop', \
         '?is_search=0&visible=0&is_ori=1&is_tag=0&profile_ftype=1&page=2#feedtop']
     fans = -1
+    title = ''
     description = ''
     avgForward = [0, 0, 0] # all, original, original with Keyword
     avgComment = [0, 0, 0]
@@ -92,7 +93,7 @@ def personCrawler(keywordId, url, keywordList):
                     driver = createBrowserFirefox()
             if not pageLoaded:
                 driver.quit()
-                return fans, description, avgForward, avgComment, resForward, resComment, lastPostTime, postType, resArticleRead, countContent, pageId
+                return title, fans, description, avgForward, avgComment, resForward, resComment, lastPostTime, postType, resArticleRead, countContent, pageId
 
             if page == 0 and idx == 0:
                 try:
@@ -114,7 +115,7 @@ def personCrawler(keywordId, url, keywordList):
                     fans = int(fans)
                     if fans < MIN_FANS:
                         driver.quit()
-                        return fans, description, avgForward, avgComment, resForward, resComment, lastPostTime, postType, resArticleRead, countContent, pageId
+                        return title, fans, description, avgForward, avgComment, resForward, resComment, lastPostTime, postType, resArticleRead, countContent, pageId
                 except Exception as ex:
                     fans = 0
                     print(ex)
@@ -321,16 +322,18 @@ def personCrawler(keywordId, url, keywordList):
 
     mentions = []
     for mention in listMention:
-        title = mention.text.strip().replace('@', '')
-        link = urljoin(driver.current_url, mention.attrib['href'].split('?')[0]).replace('www.', '')
-        if [title, link] not in mentions:
-            mentions.append([title, link])
-            #print(title + ": " + link)
-            if checkListMysqlDB(keywordId, title, link) == None:
-                appendMysqlDB(keywordId, title, link)
-
+        try:
+            title = mention.text.strip().replace('@', '')
+            link = urljoin(driver.current_url, mention.attrib['href'].split('?')[0]).replace('www.', '')
+            if [title, link] not in mentions:
+                mentions.append([title, link])
+                #print(title + ": " + link)
+                if not checkListMysqlDB(keywordId, title, link):
+                    appendMysqlDB(keywordId, title, link)
+        except:
+            continue
     driver.quit()
-    return fans, description, avgForward, avgComment, resForward, resComment, lastPostTime, postType, resArticleRead, countContent, pageId
+    return title, fans, description, avgForward, avgComment, resForward, resComment, lastPostTime, postType, resArticleRead, countContent, pageId
 
 def account2DB(keywordId, link):
     keywordList = []
@@ -341,21 +344,31 @@ def account2DB(keywordId, link):
 
     print(keywordList)
 
-    fans, description, avgForward, avgComment, resForward, resComment, lastPostTime, postType, resArticleRead, countContent, pageId = personCrawler(keywordId, link, keywordList)
-    if fans < MIN_FANS and fans != -1:
-        delAccountMysqlDB(link)
+    influencer, fans, description, avgForward, avgComment, resForward, resComment, lastPostTime, postType, resArticleRead, countContent, pageId = personCrawler(keywordId, link, keywordList)
+    if fans != -1:
+        updateFansNumberMysqlDB(fans, link)
+    if fans < MIN_FANS:
         return
 
     postType = ("%d-%d-%d-%d" % (postType[1], postType[2], postType[3], postType[0]))
     offcial = (1 if "官方" in description or "有限公司" in description else 0)
-    sql = 'UPDATE Weibo SET follower="{}", share_avg="{}", comment_avg="{}", share_range="{}", comment_range="{}", lastPostTime="{}", \
-        ori_share_avg="{}", ori_comment_avg="{}", ori_share_range="{}", ori_comment_range="{}", ori_lastPostTime="{}", \
-        key_share_avg="{}", key_comment_avg="{}", key_share_range="{}", key_comment_range="{}", \
-        post_type="{}", description="{}", article_read="{}", key_content="{}", official="{}", update_time="{}" WHERE keyword_id="{}" AND link="{}"'\
-        .format(str(fans), str(avgForward[0]), str(avgComment[0]), resForward[0], resComment[0], (str(lastPostTime[0]) if lastPostTime[0] != DEFAULT_DATE else ''), \
+    # sql = 'UPDATE Weibo SET follower="{}", share_avg="{}", comment_avg="{}", share_range="{}", comment_range="{}", lastPostTime="{}", \
+    #     ori_share_avg="{}", ori_comment_avg="{}", ori_share_range="{}", ori_comment_range="{}", ori_lastPostTime="{}", \
+    #     key_share_avg="{}", key_comment_avg="{}", key_share_range="{}", key_comment_range="{}", \
+    #     post_type="{}", description="{}", article_read="{}", key_content="{}", official="{}", update_time="{}" WHERE keyword_id="{}" AND link="{}"'\
+    #     .format(str(fans), str(avgForward[0]), str(avgComment[0]), resForward[0], resComment[0], (str(lastPostTime[0]) if lastPostTime[0] != DEFAULT_DATE else ''), \
+    #     str(avgForward[1]), str(avgComment[1]), resForward[1], resComment[1], (str(lastPostTime[1]) if lastPostTime[1] != DEFAULT_DATE else ''), \
+    #     str(avgForward[2]), str(avgComment[2]), resForward[2], resComment[2], \
+    #     postType, description, resArticleRead, countContent, offcial, datetime.datetime.utcnow(), keywordId, link)
+    sql = 'INSERT INTO Weibo (keyword_id, influencer, follower, share_avg, comment_avg, share_range, comment_range, lastPostTime, \
+        ori_share_avg, ori_comment_avg, ori_share_range, ori_comment_range, ori_lastPostTime, \
+        key_share_avg, key_comment_avg, key_share_range, key_comment_range, \
+        post_type, description, article_read, key_content, official, update_time, link) \
+        VALUES ("{}", "{}", "{}", "{}", "{}", "{}", "{}", "{}", "{}", "{}", "{}", "{}", "{}", "{}", "{}", "{}", "{}", "{}", "{}", "{}", "{}", "{}", "{}", "{}")' \
+        .format(keywordId, influencer, str(fans), str(avgForward[0]), str(avgComment[0]), resForward[0], resComment[0], (str(lastPostTime[0]) if lastPostTime[0] != DEFAULT_DATE else ''), \
         str(avgForward[1]), str(avgComment[1]), resForward[1], resComment[1], (str(lastPostTime[1]) if lastPostTime[1] != DEFAULT_DATE else ''), \
         str(avgForward[2]), str(avgComment[2]), resForward[2], resComment[2], \
-        postType, description, resArticleRead, countContent, offcial, datetime.datetime.utcnow(), keywordId, link)
+        postType, description, resArticleRead, countContent, offcial, datetime.datetime.utcnow(), link)
     updateMysqlDB(sql)
 
     if avgForward[1] >= 10 or avgComment[1] >= 10:
@@ -366,10 +379,14 @@ def checkListMysqlDB(keyword_id, influencer, link):
     circle = queryOneMysqlDB(sql)[0]
     #sql = 'SELECT keyword_id, influencer, link FROM Weibo WHERE keyword_id="{}" AND influencer="{}" AND link="{}"'.format(keyword_id, influencer, link)
     sql = 'SELECT r.id FROM Weibo AS r, Weibo_keyword AS k WHERE r.keyword_id=k.id AND r.influencer="{}" AND r.link="{}" AND k.circle="{}"'.format(influencer, link, circle)
-    return queryOneMysqlDB(sql)
+    if queryOneMysqlDB(sql) != None:
+        return True
+    else:
+        sql = 'SELECT r.id FROM Weibo_leads AS r, Weibo_keyword AS k WHERE r.keyword_id=k.id AND r.influencer="{}" AND r.link="{}" AND k.circle="{}"'.format(influencer, link, circle)
+        return True if queryOneMysqlDB(sql)!=None else False
 
 def appendMysqlDB(keyword_id, influencer, link):
-    sql = 'INSERT INTO Weibo (keyword_id, influencer, link) VALUES ("{}", "{}", "{}")'.format(keyword_id, influencer, link)
+    sql = 'INSERT INTO Weibo_leads (keyword_id, influencer, link, search_type) VALUES ("{}", "{}", "{}", "{}")'.format(keyword_id, influencer, link, 3)
     updateMysqlDB(sql)
 
 def queryAccountMysqlDB():
@@ -377,7 +394,8 @@ def queryAccountMysqlDB():
     return queryOneMysqlDB(sql)
 
 def queryAccountAllMysqlDB(id):
-    sql = 'SELECT keyword_id, link, id FROM Weibo WHERE share_avg=0 AND comment_avg=0 AND post_type="" AND keyword_id!=0 AND id>"{}" ORDER BY id ASC LIMIT 100'.format(id)
+    #sql = 'SELECT keyword_id, link, id FROM Weibo WHERE share_avg=0 AND comment_avg=0 AND post_type="" AND keyword_id!=0 AND id>"{}" ORDER BY id ASC LIMIT 100'.format(id)
+    sql = 'SELECT keyword_id, link, id FROM Weibo_leads WHERE fans IS NULL ORDER BY search_type ASC, id ASC LIMIT 100'
     return queryAllMysqlDB(sql)
 
 def queryCircleMysqlDB(keyword_id):
@@ -396,10 +414,14 @@ def delAccountMysqlDB(link):
     sql = 'DELETE FROM Weibo WHERE link="{}"'.format(link)
     updateMysqlDB(sql)
 
+def updateFansNumberMysqlDB(fans, link):
+    sql = 'UPDATE Weibo_leads SET fans="{}" WHERE link="{}"'.format(fans, link)
+    updateMysqlDB(sql)
+
 def putAccount2Queue(que):
     maxId = 0
     while True:
-        if que.qsize() < 20:
+        if que.qsize() < 20:    # can't use in mac/linux
             accounts = queryAccountAllMysqlDB(maxId)
             for account in accounts:
                 print("{}: {} >> {}".format(account[2], account[0], account[1]))

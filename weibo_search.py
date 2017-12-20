@@ -262,10 +262,14 @@ def checkListMysqlDB(keyword_id, influencer, link):
     circle = queryOneMysqlDB(sql)[0]
     #sql = 'SELECT keyword_id, influencer, link FROM Weibo WHERE keyword_id="{}" AND influencer="{}" AND link="{}"'.format(keyword_id, influencer, link)
     sql = 'SELECT r.id FROM Weibo AS r, Weibo_keyword AS k WHERE r.keyword_id=k.id AND r.influencer="{}" AND r.link="{}" AND k.circle="{}"'.format(influencer, link, circle)
-    return queryOneMysqlDB(sql)
+    if queryOneMysqlDB(sql) != None:
+        return True
+    else:
+        sql = 'SELECT r.id FROM Weibo_leads AS r, Weibo_keyword AS k WHERE r.keyword_id=k.id AND r.influencer="{}" AND r.link="{}" AND k.circle="{}"'.format(influencer, link, circle)
+        return True if queryOneMysqlDB(sql)!=None else False
 
-def appendMysqlDB(keyword_id, influencer, link):
-    sql = 'INSERT INTO Weibo (keyword_id, influencer, link) VALUES ("{}", "{}", "{}")'.format(keyword_id, influencer, link)
+def appendMysqlDB(keyword_id, influencer, link, searchType):
+    sql = 'INSERT INTO Weibo_leads (keyword_id, influencer, link, search_type) VALUES ("{}", "{}", "{}", "{}")'.format(keyword_id, influencer, link, searchType)
     updateMysqlDB(sql)
 
 def markAsFinishedMysqlDB(keyword_id, keyword):
@@ -293,8 +297,8 @@ def main(argv):
             print('-------- {}.{} --------'.format(pageId[0], pageId[1]))
             personList = searchFollowerCrawler(pageId[1], 5)    # only 5 pages available
             for person in personList:
-                if checkListMysqlDB(pageId[0], person[0], person[1]) == None:
-                    appendMysqlDB(pageId[0], person[0], person[1])
+                if not checkListMysqlDB(pageId[0], person[0], person[1]):
+                    appendMysqlDB(pageId[0], person[0], person[1], 2)
 
             delPageidMysqlDB(pageId[0], pageId[1])
 
@@ -306,15 +310,15 @@ def main(argv):
         print('-------- {}.{} --------'.format(keyword[0], keyword[1]))
         personList = searchUserCrawler(keyword[1], MAX_PAGE)
         for person in personList:
-            if checkListMysqlDB(keyword[0], person[0], person[1]) == None:
-                appendMysqlDB(keyword[0], person[0], person[1])
+            if not checkListMysqlDB(keyword[0], person[0], person[1]):
+                appendMysqlDB(keyword[0], person[0], person[1], 1)
 
         time.sleep(randint(5,10))
 
         personList = searchCrawler(keyword[1], MAX_PAGE)
         for person in personList:
-            if checkListMysqlDB(keyword[0], person[0], person[1]) == None:
-                appendMysqlDB(keyword[0], person[0], person[1])
+            if not checkListMysqlDB(keyword[0], person[0], person[1]):
+                appendMysqlDB(keyword[0], person[0], person[1], 1)
 
         markAsFinishedMysqlDB(keyword[0], keyword[1])
 
