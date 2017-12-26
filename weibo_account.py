@@ -323,13 +323,13 @@ def personCrawler(keywordId, url, keywordList):
     mentions = []
     for mention in listMention:
         try:
-            title = mention.text.strip().replace('@', '')
+            name = mention.text.strip().replace('@', '')
             link = urljoin(driver.current_url, mention.attrib['href'].split('?')[0]).replace('www.', '')
-            if [title, link] not in mentions:
-                mentions.append([title, link])
-                #print(title + ": " + link)
-                if not checkListMysqlDB(keywordId, title, link):
-                    appendMysqlDB(keywordId, title, link)
+            if [name, link] not in mentions:
+                mentions.append([name, link])
+                #print(name + ": " + link)
+                if not checkListMysqlDB(keywordId, name, link):
+                    appendMysqlDB(keywordId, name, link)
         except:
             continue
     driver.quit()
@@ -365,7 +365,8 @@ def account2DB(keywordId, link):
         key_share_avg, key_comment_avg, key_share_range, key_comment_range, \
         post_type, description, article_read, key_content, official, update_time, link) \
         VALUES ("{}", "{}", "{}", "{}", "{}", "{}", "{}", "{}", "{}", "{}", "{}", "{}", "{}", "{}", "{}", "{}", "{}", "{}", "{}", "{}", "{}", "{}", "{}", "{}")' \
-        .format(keywordId, influencer, str(fans), str(avgForward[0]), str(avgComment[0]), resForward[0], resComment[0], (str(lastPostTime[0]) if lastPostTime[0] != DEFAULT_DATE else ''), \
+        .format(keywordId, influencer, str(fans), \
+        str(avgForward[0]), str(avgComment[0]), resForward[0], resComment[0], (str(lastPostTime[0]) if lastPostTime[0] != DEFAULT_DATE else ''), \
         str(avgForward[1]), str(avgComment[1]), resForward[1], resComment[1], (str(lastPostTime[1]) if lastPostTime[1] != DEFAULT_DATE else ''), \
         str(avgForward[2]), str(avgComment[2]), resForward[2], resComment[2], \
         postType, description, resArticleRead, countContent, offcial, datetime.datetime.utcnow(), link)
@@ -421,7 +422,12 @@ def updateFansNumberMysqlDB(fans, link):
 def putAccount2Queue(que):
     maxId = 0
     while True:
-        if que.qsize() < 20:    # can't use in mac/linux
+        try:
+            loadList = if que.qsize() < 20      # can't use in mac/linux
+        except:
+            loadList = True                     # temp solution
+
+        if loadList:
             accounts = queryAccountAllMysqlDB(maxId)
             for account in accounts:
                 print("{}: {} >> {}".format(account[2], account[0], account[1]))
